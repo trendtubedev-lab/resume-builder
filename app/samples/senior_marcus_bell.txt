@@ -1,0 +1,33 @@
+Marcus Bell
+marcus.bell@email.com | (555) 901-3382 | Seattle, WA | linkedin.com/in/marcus-bell
+
+SUMMARY
+Analytics and data science leader with 15 years of experience, including 6 years managing
+teams. Built and scaled analytics functions from scratch, partnered with executives on
+strategy, and delivered data products that moved revenue. Seeking a Director of Analytics role.
+
+SKILLS
+Analytics strategy, Team leadership, SQL, Python, Snowflake, dbt, Looker, Experimentation,
+Forecasting, Machine learning, Data governance, Executive communication, Hiring, Roadmapping
+
+EXPERIENCE
+Head of Analytics — Northwind Software | Seattle, WA | Jan 2019 – Present
+- Built the analytics org from 2 to 14 people across analytics engineering and data science.
+- Set company-wide experimentation standards; the program now runs 200+ tests/year.
+- Led a forecasting initiative that improved quarterly revenue prediction accuracy to within 3%.
+- Presented quarterly insights to the C-suite and board; owned the analytics budget.
+
+Analytics Manager — Cascade Commerce | Seattle, WA | Jun 2014 – Jan 2019
+- Managed a team of 5 analysts supporting marketing, product, and finance.
+- Rebuilt the data warehouse on Snowflake, cutting query costs 35%.
+- Launched the company's first self-serve Looker environment for 100+ business users.
+
+Senior Data Analyst — Cascade Commerce | Seattle, WA | Aug 2010 – Jun 2014
+- Delivered the customer LTV model that reshaped acquisition spend allocation.
+
+EDUCATION
+M.S. Statistics — University of Washington | Seattle, WA | 2010
+B.S. Mathematics — University of Oregon | Eugene, OR | 2008
+
+CERTIFICATIONS
+- AWS Certified Data Analytics – Specialty

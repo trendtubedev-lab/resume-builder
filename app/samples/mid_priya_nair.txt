@@ -1,0 +1,29 @@
+Priya Nair
+priya.nair@email.com | (555) 248-7790 | Denver, CO | linkedin.com/in/priya-nair
+
+SUMMARY
+Data analyst with 6 years of experience turning business questions into dashboards and
+A/B tests. Comfortable owning the full pipeline from SQL extraction to stakeholder
+presentation. Looking to move into a senior analytics role.
+
+SKILLS
+SQL, Python (pandas, scikit-learn), Tableau, Looker, A/B testing, ETL, dbt, Snowflake,
+Stakeholder management, Statistics, Excel
+
+EXPERIENCE
+Senior Data Analyst — Summit Retail Group | Denver, CO | Mar 2021 – Present
+- Own reporting for a $40M e-commerce line; built the Looker model used by 30+ stakeholders.
+- Designed and ran 25+ A/B tests, including a checkout change that lifted conversion 7%.
+- Automated a weekly ETL job in dbt/Snowflake, cutting manual reporting time by 10 hours/week.
+- Mentor two junior analysts on SQL and experiment design.
+
+Data Analyst — Frontier Media | Denver, CO | Jul 2018 – Mar 2021
+- Built churn dashboards in Tableau that informed a retention campaign reducing churn 4%.
+- Partnered with marketing to size audience segments from a 5M-row customer table.
+
+EDUCATION
+B.A. Economics — Colorado State University | Fort Collins, CO | 2018
+
+CERTIFICATIONS
+- Google Data Analytics Professional Certificate
+- Tableau Desktop Specialist

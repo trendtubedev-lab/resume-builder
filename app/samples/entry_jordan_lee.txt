@@ -1,0 +1,27 @@
+Jordan Lee
+jordan.lee@email.com | (555) 012-3456 | Austin, TX | linkedin.com/in/jordan-lee
+
+SUMMARY
+Recent Information Systems graduate with internship experience in data analysis and a campus
+record of turning messy spreadsheets into clear dashboards. Eager to grow as a junior data analyst.
+
+SKILLS
+Excel, SQL (basic), Python (pandas), Tableau, Data cleaning, Google Sheets, Communication, Teamwork
+
+EXPERIENCE
+Data Analyst Intern — BrightPath Marketing | Austin, TX | Jun 2024 – Aug 2024
+- Cleaned and combined campaign data from 5 sources into a single weekly Excel report.
+- Built 3 Tableau dashboards that the marketing team reviewed in standups.
+- Wrote basic SQL queries to pull customer lists for email campaigns.
+
+Sales Associate (Part-time) — Campus Bookstore | Austin, TX | Sep 2022 – May 2024
+- Handled point-of-sale transactions and balanced the register daily.
+- Trained 4 new student employees on inventory software.
+
+EDUCATION
+B.S. Information Systems — University of Texas at Austin | Austin, TX | May 2024
+GPA 3.5 / 4.0. Relevant coursework: Databases, Statistics, Intro to Data Science.
+
+PROJECTS
+- Capstone: Built a Python script that scraped public housing data and visualized rent trends.
+- Class project: Designed a small SQLite database for a mock e-commerce store.

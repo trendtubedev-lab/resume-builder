@@ -1,0 +1,21 @@
+Senior Data Analyst — GreenLeaf Commerce (Remote, US)
+
+About the role:
+We're hiring a Senior Data Analyst to own analytics for our growing e-commerce business.
+You'll partner with marketing, product, and finance to turn data into decisions, build
+self-serve dashboards, and run experiments that move key metrics.
+
+What you'll do:
+- Build and maintain dashboards in Looker for stakeholders across the company.
+- Design and analyze A/B tests to improve conversion and retention.
+- Write and optimize SQL against our Snowflake warehouse; model data in dbt.
+- Translate ambiguous business questions into clear analyses and recommendations.
+- Mentor junior analysts and raise the bar on analytical rigor.
+
+What we're looking for:
+- 4+ years in data/analytics, ideally in e-commerce or retail.
+- Strong SQL and experience with a cloud data warehouse (Snowflake preferred).
+- Proficiency with a BI tool (Looker preferred) and Python for analysis.
+- Hands-on A/B testing and experimentation experience.
+- Excellent communication and stakeholder management skills.
+- Bonus: dbt, forecasting, or statistics background.

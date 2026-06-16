@@ -1,0 +1,13 @@
+# One-click deploy to Render.com — connect this repo and it reads this file.
+services:
+  - type: web
+    name: tailorcv
+    runtime: docker
+    plan: starter
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false   # set this in the Render dashboard (kept secret)
+      - key: REVIEWER_MODEL
+        value: claude-sonnet-4-6
+      - key: SYNTH_MODEL
+        value: claude-sonnet-4-6
