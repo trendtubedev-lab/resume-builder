@@ -27,7 +27,7 @@ FastAPI backend + single-file HTML frontend (`app/static/index.html`). Upload 1�
 
 ## Open / next
 - claude-code mode speed: Michael says it's no longer slow (2026-06-17). Perf item closed; no wait-text/Haiku change made.
-- **C DONE (2026-06-17): untrusted PDF/DOCX parsing hardened.** `parsing.py` (zip-bomb guard, text cap, broad error→generic ValueError) + `main.py` (parse off-loop via `asyncio.to_thread` with `PARSE_TIMEOUT`, default 15s). Env knobs: `PARSE_TIMEOUT_SECONDS`, `MAX_DOCX_UNCOMPRESSED_MB`, `MAX_DOCX_ZIP_RATIO`, `MAX_RESUME_CHARS`. Verified locally; not yet committed.
+- **C DONE (2026-06-17): untrusted PDF/DOCX parsing hardened.** `parsing.py` (zip-bomb guard, text cap, broad error→generic ValueError) + `main.py` (parse off-loop via `asyncio.to_thread` with `PARSE_TIMEOUT`, default 15s). Env knobs: `PARSE_TIMEOUT_SECONDS`, `MAX_DOCX_UNCOMPRESSED_MB`, `MAX_DOCX_ZIP_RATIO`, `MAX_RESUME_CHARS`. Verified locally; committed+pushed `4bb171a`.
 - D: bring-your-own-key vs. you-pay — OPEN (see `DECISIONS.md`); claude-code mode adds a 3rd lane (run-on-your-own-plan) for the local trial but doesn't resolve the hosted-billing question.
 - Live API validation must run locally (`python scripts/live_test.py`); the Cowork sandbox blocks `api.anthropic.com`. (claude-code mode worked from here — `claude` CLI present + signed in on this machine.)
 
