@@ -8,7 +8,10 @@ Set AUTH_DISABLED=1 to bypass Google for local development.
 """
 from __future__ import annotations
 
+import logging
 import os
+import re
+import secrets
 import uuid
 from pathlib import Path
 
@@ -21,10 +24,49 @@ from . import agents, auth, demo, export, parsing
 
 load_dotenv()
 
+log = logging.getLogger("tailorcv")
+
+# Session cookies are signed with SESSION_SECRET. If it's missing or left at a
+# placeholder, anyone could forge a cookie for any user (full auth bypass, and
+# with a server-wide ANTHROPIC_API_KEY, free use of the operator's key). So we
+# refuse to boot insecurely when auth is enabled.
+_PLACEHOLDER_SECRETS = {
+    "",
+    "dev-insecure-change-me",            # old hardcoded default
+    "change-me-to-a-long-random-string",  # the value shipped in .env.example
+}
+
+
+def resolve_session_secret() -> str:
+    """Return a safe session signing key, or fail fast in production.
+
+    - A real, non-placeholder SESSION_SECRET is used as-is.
+    - In local AUTH_DISABLED mode an ephemeral random key is generated (sessions
+      simply reset on restart, which is fine for single-user local use).
+    - Otherwise (auth enabled + no real secret) we raise, refusing to start with
+      a forgeable cookie.
+    """
+    secret = (os.getenv("SESSION_SECRET") or "").strip()
+    if secret and secret not in _PLACEHOLDER_SECRETS:
+        return secret
+    if auth.auth_disabled():
+        log.warning(
+            "SESSION_SECRET is unset or a placeholder; using an ephemeral random "
+            "key (OK for local AUTH_DISABLED mode — sessions reset on restart)."
+        )
+        return secrets.token_hex(32)
+    raise RuntimeError(
+        "SESSION_SECRET is unset or still a placeholder. Set it to a long random "
+        'value (python -c "import secrets; print(secrets.token_hex(32))") before '
+        "running with authentication enabled, or set AUTH_DISABLED=1 for local "
+        "single-user use."
+    )
+
+
 app = FastAPI(title="TailorCV")
 app.add_middleware(
     SessionMiddleware,
-    secret_key=os.getenv("SESSION_SECRET", "dev-insecure-change-me"),
+    secret_key=resolve_session_secret(),
     same_site="lax",
     https_only=os.getenv("HTTPS_ONLY", "").lower() in {"1", "true", "yes", "on"},
 )
@@ -38,6 +80,39 @@ FRONTEND = Path(__file__).parent / "static" / "index.html"
 SAMPLES_DIR = Path(__file__).parent / "samples"
 MAX_FILES = 3
 MAX_BYTES = 5 * 1024 * 1024  # 5 MB per file
+MAX_TOTAL_BYTES = 12 * 1024 * 1024  # 12 MB across all files in one request
+CHUNK_SIZE = 64 * 1024
+
+
+def _safe_filename(name: str | None) -> str:
+    """A filesystem/header-safe download stem.
+
+    The resume name comes from user uploads / model output and flows into a
+    Content-Disposition header, so quotes and CRLF must never survive (response
+    header injection). Keep only a conservative charset; fall back to 'resume'.
+    """
+    base = (name or "").strip().replace(" ", "_")
+    base = re.sub(r"[^A-Za-z0-9._-]", "", base).strip("._-")
+    return (base or "resume")[:80]
+
+
+async def _read_capped(upload: UploadFile, limit: int) -> bytes:
+    """Read an upload in chunks, aborting as soon as it exceeds `limit`.
+
+    The previous code read the whole file into memory and only then checked the
+    size, so the cap didn't actually bound memory. This stops at the limit.
+    """
+    buf = bytearray()
+    while True:
+        chunk = await upload.read(CHUNK_SIZE)
+        if not chunk:
+            break
+        buf.extend(chunk)
+        if len(buf) > limit:
+            raise HTTPException(
+                400, f"'{upload.filename}' is too large (max {limit // (1024 * 1024)} MB)."
+            )
+    return bytes(buf)
 
 SAMPLES = [
     {"id": "entry", "label": "Entry-level — Jordan Lee", "file": "entry_jordan_lee.txt"},
@@ -128,10 +203,14 @@ async def tailor(
         raise HTTPException(400, f"Upload at most {MAX_FILES} resumes.")
 
     chunks = []
+    total = 0
     for f in files:
-        data = await f.read()
-        if len(data) > MAX_BYTES:
-            raise HTTPException(400, f"'{f.filename}' is too large (max 5 MB).")
+        data = await _read_capped(f, MAX_BYTES)
+        total += len(data)
+        if total > MAX_TOTAL_BYTES:
+            raise HTTPException(
+                400, f"Uploads are too large in total (max {MAX_TOTAL_BYTES // (1024 * 1024)} MB)."
+            )
         try:
             text = parsing.extract_text(f.filename, data)
         except ValueError as e:
@@ -175,7 +254,7 @@ def download(request: Request, job_id: str, format: str = "pdf"):
     if not item or item.get("owner") != user["email"]:
         raise HTTPException(404, "Result expired or not found. Generate again.")
     resume = item["resume"]
-    name = (resume.get("name") or "resume").replace(" ", "_")
+    name = _safe_filename(resume.get("name"))
     if format == "docx":
         return Response(
             content=export.build_docx(resume),
