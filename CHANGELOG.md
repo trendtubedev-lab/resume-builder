@@ -2,6 +2,27 @@
 
 Newest entries on top. Each entry: what changed, why, and how it was verified.
 
+## 2026-06-17 — Synthesizer company-name fix + UTF-8 stdout fix + PROVIDER fix
+
+- **What:**
+  - **`PROVIDER` not loading from `.env`:** root cause was the key was simply absent
+    from `.env` (not an encoding issue). Added `PROVIDER=claude-code` via
+    `Add-Content -Encoding utf8`. Verified with dotenv one-liner.
+  - **UTF-8 stdout fix (`scripts/live_test.py`):** Windows cp1252 console crashed
+    on Unicode symbols (`→`, `✅`, `⚠️`, etc.) in the test output. Added
+    `io.TextIOWrapper` UTF-8 wrapper at script top (`errors="replace"` so unknown
+    chars degrade gracefully instead of crashing).
+  - **Synthesizer company-name fabrication fix (`app/agents.py`):** `live_test.py`
+    fabrication check flagged `'Cascade Commerce (e-commerce retailer)'` in senior
+    sample — synthesizer was appending domain descriptors to company names per panel
+    suggestion. Tightened the hard-rules prompt: `company` field must be verbatim
+    company name, no descriptors/labels/annotations allowed.
+- **Why:** `live_test.py` end-to-end run was crashing; after fixing the crash, the
+  senior sample failed fabrication check due to a genuine prompt gap.
+- **Verified:** `python scripts/live_test.py senior` → exit 0, all checks passed.
+  Full 3-sample run earlier confirmed entry + mid passed as well.
+- **Files touched:** `app/agents.py`, `scripts/live_test.py`
+
 ## 2026-06-17 — AI-firstify audit follow-ups (top-5 recs)
 
 Ran the `ai-firstify` skill (audit mode) on the project, then actioned its

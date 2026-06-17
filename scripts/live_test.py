@@ -14,10 +14,14 @@ Usage:
 """
 from __future__ import annotations
 
+import io
 import os
 import re
 import sys
 from pathlib import Path
+
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 from dotenv import load_dotenv
 
@@ -114,9 +118,17 @@ def main():
         print("\n❌ Export check failed — fix exporters before the API panel.")
         sys.exit(2)
 
-    if not (os.getenv("ANTHROPIC_API_KEY")):
-        print("No ANTHROPIC_API_KEY found. Add it to .env or export it, then re-run.")
-        sys.exit(1)
+    # Show which provider will handle the calls BEFORE any fire, so it is never
+    # a surprise whether a run costs API money.
+    if agents.using_claude_code():
+        print("\nProvider: claude-code — calls run on your local Claude Code plan "
+              "(NO API tokens billed).")
+    else:
+        print("\nProvider: api — calls bill against ANTHROPIC_API_KEY (costs money). "
+              "Set PROVIDER=claude-code in .env to use your own plan instead.")
+        if not os.getenv("ANTHROPIC_API_KEY"):
+            print("No ANTHROPIC_API_KEY found. Add it to .env or export it, then re-run.")
+            sys.exit(1)
     ids = sys.argv[1:] or list(SAMPLES)
     ok = True
     for sid in ids:

@@ -183,6 +183,9 @@ def complete(system: str, user: str, model: str, max_tokens: int,
 def _api_complete(system: str, user: str, model: str, max_tokens: int,
                   temperature: float, api_key: str | None) -> str:
     client = _client(api_key)
+    # No assistant-message prefill: newer models (e.g. claude-sonnet-4-6) reject
+    # it ("does not support assistant message prefill"). The prompts already ask
+    # for JSON-only and _parse_json() strips fences / extracts the outer object.
     msg = client.messages.create(
         model=model,
         max_tokens=max_tokens,
@@ -190,10 +193,9 @@ def _api_complete(system: str, user: str, model: str, max_tokens: int,
         system=system,
         messages=[
             {"role": "user", "content": user},
-            {"role": "assistant", "content": "{"},  # prefill forces clean JSON
         ],
     )
-    return "{" + _text(msg)
+    return _text(msg)
 
 
 def _claude_code_complete(system: str, user: str, model: str) -> str:
@@ -327,7 +329,9 @@ Hard rules (truthfulness comes before everything else):
   titles, dates, degrees, certifications, or metrics.
 - Do NOT add a skill unless the resume already shows it. You may surface and
   reorder real skills to match the job; you may not fabricate new ones.
-- Keep every employer, title, and date exactly as in the original.
+- Keep every employer, title, and date exactly as in the original. The `company`
+  field must be the verbatim company name — do NOT append descriptors, labels,
+  or domain annotations (e.g. "(e-commerce retailer)") to it.
 - Numbers: keep real metrics; never invent figures. If impact is real but
   unquantified, describe it qualitatively.
 
