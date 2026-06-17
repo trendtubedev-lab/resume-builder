@@ -3,8 +3,9 @@
 Run locally:  python -m app.main   (or: uvicorn app.main:app --reload)
 Deploy:       it's a standard ASGI app — see README for Render/Fly/Docker.
 
-Auth: Google sign-in (Authlib). Each user supplies their own Anthropic API key.
-Set AUTH_DISABLED=1 to bypass Google for local development.
+Auth: Google sign-in (Authlib). Set AUTH_DISABLED=1 to bypass for local use.
+AI: PROVIDER=claude-code routes through the user's local Claude plan (no API key).
+    For hosted mode, set ANTHROPIC_API_KEY in .env (server-level only).
 """
 from __future__ import annotations
 
@@ -151,44 +152,22 @@ def health() -> dict:
 
 @app.get("/api/me")
 def me(request: Request) -> dict:
-    """Who am I, do I have a key, and would a run use demo mode?"""
+    """Who am I, and would a run use demo mode?"""
     cc = agents.using_claude_code()
     user = auth.current_user(request)
     if not user:
         return {"authenticated": False, "oauth_configured": auth.oauth_configured(),
                 "provider": "claude-code" if cc else "api"}
-    has_key = bool(auth.user_api_key(user["email"]))
-    # In claude-code mode the local CLI runs on the user's own plan, so no API
-    # key is needed and runs are real (never demo).
+    # demo = no claude-code AND no server-level key in .env
+    server_key = bool(os.getenv("ANTHROPIC_API_KEY"))
     return {
         "authenticated": True,
         "email": user["email"],
         "name": user["name"],
         "picture": user.get("picture", ""),
         "provider": "claude-code" if cc else "api",
-        "has_key": has_key,
-        "demo": (not cc) and (not has_key),
+        "demo": (not cc) and (not server_key),
     }
-
-
-@app.post("/api/key")
-def set_key(request: Request, api_key: str = Body(..., embed=True)) -> dict:
-    user = auth.require_user(request)
-    key = (api_key or "").strip()
-    if not key:
-        auth.USER_KEYS.pop(user["email"], None)
-        return {"has_key": bool(auth.user_api_key(user["email"]))}
-    if not key.startswith("sk-ant-"):
-        raise HTTPException(400, "That doesn't look like an Anthropic key (should start with 'sk-ant-').")
-    auth.USER_KEYS[user["email"]] = key
-    return {"has_key": True}
-
-
-@app.delete("/api/key")
-def clear_key(request: Request) -> dict:
-    user = auth.require_user(request)
-    auth.USER_KEYS.pop(user["email"], None)
-    return {"has_key": bool(auth.user_api_key(user["email"]))}
 
 
 @app.get("/api/samples")
@@ -255,22 +234,19 @@ async def tailor(
         chunks.append(f"--- {f.filename} ---\n{text}")
     resume_text = "\n\n".join(chunks)
 
-    if agents.using_claude_code():
-        # Local Claude Code runs on the user's own plan — real run, no key needed.
-        key = None
-        is_demo = False
-    else:
-        key = auth.user_api_key(user["email"])
-        is_demo = not key
+    cc = agents.using_claude_code()
+    # Server-level key only — no per-user keys. None is fine for claude-code mode.
+    server_key = os.getenv("ANTHROPIC_API_KEY") or None
+    is_demo = (not cc) and (not server_key)
     try:
         if is_demo:
             panel = demo.demo_panel(resume_text, job_description)
             resume = demo.demo_synthesize(resume_text, job_description, tone)
         else:
-            panel = agents.run_panel(resume_text, job_description, api_key=key,
+            panel = agents.run_panel(resume_text, job_description, api_key=server_key,
                                    user_email=user["email"],
                                    selected_keys=selected_personas or None)
-            resume = agents.synthesize(resume_text, job_description, panel, tone, api_key=key)
+            resume = agents.synthesize(resume_text, job_description, panel, tone, api_key=server_key)
     except RuntimeError as e:
         raise HTTPException(503, str(e))
     except Exception as e:

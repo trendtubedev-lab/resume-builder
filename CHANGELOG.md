@@ -2,6 +2,26 @@
 
 Newest entries on top. Each entry: what changed, why, and how it was verified.
 
+## 2026-06-17 — Remove per-user Anthropic API key storage entirely
+
+- **What:**
+  - `app/auth.py`: removed `USER_KEYS` dict and `user_api_key()`. No per-user
+    key storage anywhere in the app.
+  - `app/main.py`: removed `/api/key` POST and DELETE endpoints. `/api/me` no
+    longer returns `has_key`. Tailor endpoint uses `os.getenv("ANTHROPIC_API_KEY")`
+    (server-level .env only) — returns None in claude-code mode.
+  - `app/static/index.html`: removed API key card UI, key-save/remove JS,
+    `renderKeyState()`. Replaced with `renderBanners()` (shows cc-banner or
+    demo-banner based on provider). Demo banner updated to point to QUICKSTART
+    instead of asking for an API key.
+- **Why:** PROVIDER=claude-code routes through the user's local Claude plan.
+  Per-user key storage was a surprise billing path. Removed completely so no
+  user (including Michael) can accidentally incur API charges.
+- **Verified:** Fresh server start; `GET /api/me` returns
+  `{"provider":"claude-code","demo":false}` with no `has_key` field.
+  No `/api/key` routes exist. No `USER_KEYS` in auth.py.
+- **Files touched:** `app/auth.py`, `app/main.py`, `app/static/index.html`
+
 ## 2026-06-17 — Extended reviewer panel: 11 new personas + per-run selector UI
 
 - **What:**

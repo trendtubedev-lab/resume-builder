@@ -1,12 +1,13 @@
-"""Google OAuth sign-in + per-user API key storage.
+"""Google OAuth sign-in.
 
 Auth uses Authlib's OIDC integration against Google. Logged-in user info lives
-in a signed session cookie (Starlette SessionMiddleware). Each user supplies
-their OWN Anthropic API key, kept server-side in memory (not on disk, not in the
-cookie). For a multi-instance deployment, move USER_KEYS to Redis/DB.
+in a signed session cookie (Starlette SessionMiddleware).
 
 Set AUTH_DISABLED=1 to bypass Google entirely for local development — every
 request is treated as a single local user.
+
+AI calls use PROVIDER=claude-code (user's own Claude plan) or a server-level
+ANTHROPIC_API_KEY in .env for hosted mode. No per-user key storage.
 """
 from __future__ import annotations
 
@@ -17,9 +18,6 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
 router = APIRouter()
-
-# In-memory per-user Anthropic keys: { email: "sk-ant-..." }.
-USER_KEYS: dict[str, str] = {}
 
 _oauth: OAuth | None = None
 
@@ -58,11 +56,6 @@ def require_user(request: Request) -> dict:
     if not user:
         raise HTTPException(401, "Please sign in.")
     return user
-
-
-def user_api_key(email: str) -> str | None:
-    """The key to use for this user: their own, else a server-wide env key."""
-    return USER_KEYS.get(email) or os.getenv("ANTHROPIC_API_KEY") or None
 
 
 @router.get("/auth/login")

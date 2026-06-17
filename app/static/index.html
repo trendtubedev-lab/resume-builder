@@ -341,28 +341,11 @@
   </div>
 
   <div id="demo-banner" class="banner hidden">
-    <b>Demo mode.</b> No API key on your account, so results use a lightweight offline preview (not the full AI panel). Add your key below for real AI tailoring, or try a sample.
+    <b>Demo mode.</b> Results use a lightweight offline preview — not the full AI panel. To enable real tailoring, set <code>PROVIDER=claude-code</code> in your <code>.env</code> and restart. See <a href="QUICKSTART_FRIENDS.md" target="_blank">QUICKSTART_FRIENDS.md</a>.
   </div>
 
   <div id="cc-banner" class="banner hidden" style="background:#e8f5e9;border-color:#a5d6a7;color:#1b5e20">
     <b>Running on your Claude plan.</b> TailorCV is using your local Claude Code sign-in — no API key needed.
-  </div>
-
-  <!-- API key card -->
-  <div class="card" id="key-card">
-    <label>Your Anthropic API key</label>
-    <div id="key-set" class="keyok hidden">
-      <span>✓ Your API key is set — real AI tailoring is enabled.</span>
-      <button class="ghost" id="key-remove">Remove key</button>
-    </div>
-    <div id="key-enter">
-      <p class="hint" style="margin:0 0 8px">Stored only in memory for your session, never written to disk. Get one at <a href="https://console.anthropic.com/" target="_blank" rel="noopener">console.anthropic.com</a>.</p>
-      <div class="row">
-        <div style="flex:3"><input type="password" id="key-input" placeholder="sk-ant-..." autocomplete="off" /></div>
-        <div style="flex:0 0 auto"><button class="ghost" id="key-save">Save key</button></div>
-      </div>
-      <div id="key-msg" class="hint" style="margin-top:6px"></div>
-    </div>
   </div>
 
   <div class="card" id="form-card">
@@ -449,7 +432,7 @@ function showApp(){
   $("userbox").innerHTML =
     (me.picture ? `<img src="${me.picture}" alt="">` : "") +
     `<span>${esc(me.name||me.email)}</span> <a href="/auth/logout">Sign out</a>`;
-  renderKeyState();
+  renderBanners();
   // samples
   fetch("/api/samples").then(r=>r.json()).then(s=>{
     const sel = $("sample");
@@ -458,33 +441,15 @@ function showApp(){
   loadPersonas();
 }
 
-function renderKeyState(){
-  // claude-code mode: the local CLI runs on the user's own plan — no key UI, no demo.
+function renderBanners(){
   if (me.provider === "claude-code"){
-    $("key-card").classList.add("hidden");
     $("demo-banner").classList.add("hidden");
     $("cc-banner").classList.remove("hidden");
-    return;
+  } else {
+    $("cc-banner").classList.add("hidden");
+    $("demo-banner").classList.toggle("hidden", !me.demo);
   }
-  const has = me.has_key;
-  $("key-set").classList.toggle("hidden", !has);
-  $("key-enter").classList.toggle("hidden", has);
-  $("demo-banner").classList.toggle("hidden", has);
 }
-
-$("key-save").onclick = async () => {
-  const v = $("key-input").value.trim();
-  if(!v) return setKeyMsg("Enter a key first.", true);
-  setKeyMsg("Saving…");
-  const r = await fetch("/api/key",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({api_key:v})});
-  const d = await r.json();
-  if(!r.ok) return setKeyMsg(d.detail||"Could not save key.", true);
-  $("key-input").value=""; await loadMe(); renderKeyState(); setKeyMsg("");
-};
-$("key-remove").onclick = async () => {
-  await fetch("/api/key",{method:"DELETE"}); await loadMe(); renderKeyState();
-};
-function setKeyMsg(m,err){ const e=$("key-msg"); e.innerHTML = err?`<span style="color:#a12020">${m}</span>`:m; }
 
 // file picking
 const drop=$("drop"), fileInput=$("files");
