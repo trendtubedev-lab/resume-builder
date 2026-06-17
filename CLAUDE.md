@@ -1,10 +1,11 @@
-# Project rules & preferences — TailorCV
+# Project rules & preferences
 
 ## Me
 Michael (mritner@gmail.com). GitHub identity for this project: **trendtubedev-lab** (account email trendtubedev@gmail.com). Building **TailorCV**, a resume-tailoring web app, and leveling up while doing it. I do not want novice mistakes — verify, don't assume.
 
 ## Priority when rules conflict
 Safety / ask-first > accuracy > verification > everything else.
+
 
 ---
 
@@ -13,16 +14,16 @@ These exist because real failures happened. Run them, show the output, do not sk
 
 0. **Load state before working.** Read `MEMORY.md`, `DECISIONS.md`, and the last ~5 entries of `CHANGELOG.md` to understand where things stand. Note any `[UNVERIFIED]` items. Then confirm the goal for the session before starting non-trivial work.
 
-1. **Confirm you are in the RIGHT folder.** The real repo is `C:\Users\mayne\CLAUDE-workspace\resume builder`. Before editing anything:
+1. **Confirm you are in the RIGHT folder.** The real repo is _[/path/to/your/repo]_. Before editing anything:
    - Run `pwd` (or check the path of the file you're about to touch) AND `git rev-parse --show-toplevel`.
    - Print the resolved path and compare it to the repo path above and to the path shown in my shell prompt.
-   - If they don't match — STOP and tell me. Do NOT edit a "similar looking" copy elsewhere (e.g. anything under `Claude\Projects\...`). There have been duplicate folders; editing the wrong one wastes my time.
+   - If they don't match — STOP and tell me. Do NOT edit a "similar looking" copy elsewhere. If duplicate folders exist on your system, editing the wrong one wastes time.
 
 2. **Trust nothing that looks truncated or stale — root-cause it.** If a file read via the sandbox/bash looks short, cut off, or fails to compile:
-   - Do NOT call it "mount lag" and route around it. Compare `wc -l <file>` against `git show HEAD:<file> | wc -l` and against the Read tool.
-   - If the sandbox view is shorter than reality, the sandbox view is CORRUPT. The Read/Write/Edit tools (host-side) are authoritative; bash/git/grep run in the sandbox may be lying.
+   - Do NOT assume it's a transient issue and route around it. Compare `wc -l <file>` against `git show HEAD:<file> | wc -l` and against the Read tool.
+   - If the sandbox view is shorter than reality, the sandbox view is suspect. The Read/Write/Edit tools (host-side) are authoritative; bash/git/grep run in the sandbox may return stale data.
 
-3. **NEVER run git write commands (add/commit/push/reset) from the sandbox if any file view is truncated** — you will commit corrupted half-files. When in doubt, hand me the exact commands to run in my own PowerShell instead.
+3. **NEVER run git write commands (add/commit/push/reset) from the sandbox if any file view is truncated** — you will commit corrupted half-files. When in doubt, hand me the exact commands to run in my own shell instead.
 
 4. **Inventory your tools before claiming something is impossible.** Check what's actually available (file tools, sandbox bash, Claude-in-Chrome browser tools, computer-use) before saying "I can't." Don't assert a limitation you didn't verify.
 
@@ -43,7 +44,7 @@ Do this as you go, not in a batch at the end.
 - **Interview me before non-trivial work.** If a request is ambiguous, ask about goal, scope, and what "done" looks like first. Batch clarifying questions into one round. Restate your understanding, then proceed.
 - **Spec before building.** Short spec first (what it does, who it's for, who it's not for, success criteria, out of scope). Don't build until I approve.
 - **Ask before anything destructive, irreversible, or that costs money** — deleting/overwriting files, force-push, `git reset --hard`, DB migrations, installing/upgrading deps, paid API calls, deploys, sending messages, creating/pushing repos. State exactly what you'll do and wait for an explicit "yes."
-- **Launching agents / subagents.** Do NOT launch subagents (Agent/Task tool) unless I explicitly ask — they start cold, re-derive context, and burn tokens; handle multi-step or "thorough" work inline with your own tools. Exception: you may *propose* a subagent for independent verification/review of high-stakes changes (security, destructive ops, deploys) — state why and wait for my "yes" before spawning. When I do ask you to spawn one, pass the needed context explicitly (it inherits nothing), keep it scoped to one task, and relay only what matters back.
+- **Launching agents / subagents.** Use subagents liberally for: (a) heavy or parallel work — large searches, multi-file research, anything with big fan-out — so the main thread's context stays clean; (b) executing approved build steps in parallel where steps are independent; (c) a separate verification/review pass before claiming non-trivial work done. Proactively offer to launch agents when a task is large or multi-part, then let me decide. When spawning, pass the needed context explicitly (it inherits nothing), keep it scoped to one task, and relay only what matters back.
 - Verify with a check you can actually run and **show the output as evidence**. If no check is possible, say so. Never simulate or invent results.
 - If you get stuck (same fix fails twice, no progress), STOP and ask. No retry loops.
 - **Secrets:** live in `.env` only — never hardcode defaults, and never print, commit, or copy them (not in this file, committed files, or chat). If one is about to be committed, stop and warn me.
@@ -59,11 +60,9 @@ Do this as you go, not in a batch at the end.
 ## Project
 - One line: TailorCV — FastAPI + single-file HTML app that tailors 1–3 uploaded resumes to a pasted job description via a multi-agent Claude review panel; exports PDF/Word.
 - Build / run: `start.command` (macOS) / `start.bat` (Windows) auto-create venv + launch; or `pip install -r requirements.txt` then run `app/main.py`.
-- Test: `python scripts/live_test.py` (live tailoring harness — must run locally; the sandbox blocks `api.anthropic.com`).
-- Deploy: Docker / Render (`render.yaml`, `Procfile`).
-- GitHub target: public repo `trendtubedev-lab/resume-builder`.
+- Test / lint / typecheck: `python scripts/live_test.py` (live tailoring harness — must run locally; the sandbox blocks `api.anthropic.com`).
 - Never touch: `.env` (secrets), `app/__pycache__/`.
 
-## Known environment hazards (learned the hard way)
-- The Cowork sandbox sometimes mounts the WRONG folder or serves TRUNCATED files. Both happened. Preflight steps 1–3 above exist specifically to catch this. Treat the host-side Read/Write/Edit tools as ground truth.
-- A duplicate copy of this project has existed under `C:\Users\mayne\Claude\Projects\resume builder.` — that is NOT the repo. Do not edit it.
+## Environment-specific notes
+- The Cowork sandbox has mounted the WRONG folder and served TRUNCATED files. Preflight steps 1–3 exist to catch this; treat host-side Read/Write/Edit as ground truth.
+- A duplicate copy has existed under `C:\Users\mayne\Claude\Projects\resume builder` — that is NOT the repo. Do not edit it.
