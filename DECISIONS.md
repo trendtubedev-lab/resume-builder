@@ -3,6 +3,7 @@
 Locked choices and open questions. Don't re-litigate LOCKED items without flagging me. Date new entries.
 
 ## Locked
+- 2026-06-16 — **Two-phase rollout:** Phase 1 = a few friends download & run TailorCV locally on their OWN Claude Pro/Max plans (`PROVIDER=claude-code`, no API key); iterate; Phase 2 = host for the masses (API keys + billing/persistence). The `claude-code` local provider is a trial harness, not the final hosted architecture.
 - 2026-06-16 — Memory & rules live repo-local (`CLAUDE.md` + `MEMORY.md` + `DECISIONS.md` + `CHANGELOG.md`), NOT the Cowork auto-memory (read-only/unreliable here).
 - 2026-06-16 — Public GitHub repo `trendtubedev-lab/resume-builder`, branch `main`.
 - Models default to `claude-sonnet-4-6` (`REVIEWER_MODEL` / `SYNTH_MODEL`, overridable via env).

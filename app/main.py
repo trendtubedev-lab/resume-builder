@@ -72,6 +72,10 @@ app.add_middleware(
 )
 app.include_router(auth.router)
 
+# Validate the selected completion provider at boot (e.g. claude-code mode
+# requires the `claude` CLI on PATH). Fails fast with a friendly message.
+agents.preflight()
+
 # In-memory store of generated resumes, keyed by job id.
 # For a hosted multi-user service, swap this for Redis or a DB (see README).
 _STORE: dict[str, dict] = {}
@@ -134,17 +138,22 @@ def health() -> dict:
 @app.get("/api/me")
 def me(request: Request) -> dict:
     """Who am I, do I have a key, and would a run use demo mode?"""
+    cc = agents.using_claude_code()
     user = auth.current_user(request)
     if not user:
-        return {"authenticated": False, "oauth_configured": auth.oauth_configured()}
+        return {"authenticated": False, "oauth_configured": auth.oauth_configured(),
+                "provider": "claude-code" if cc else "api"}
     has_key = bool(auth.user_api_key(user["email"]))
+    # In claude-code mode the local CLI runs on the user's own plan, so no API
+    # key is needed and runs are real (never demo).
     return {
         "authenticated": True,
         "email": user["email"],
         "name": user["name"],
         "picture": user.get("picture", ""),
+        "provider": "claude-code" if cc else "api",
         "has_key": has_key,
-        "demo": not has_key,
+        "demo": (not cc) and (not has_key),
     }
 
 
@@ -218,8 +227,13 @@ async def tailor(
         chunks.append(f"--- {f.filename} ---\n{text}")
     resume_text = "\n\n".join(chunks)
 
-    key = auth.user_api_key(user["email"])
-    is_demo = not key
+    if agents.using_claude_code():
+        # Local Claude Code runs on the user's own plan — real run, no key needed.
+        key = None
+        is_demo = False
+    else:
+        key = auth.user_api_key(user["email"])
+        is_demo = not key
     try:
         if is_demo:
             panel = demo.demo_panel(resume_text, job_description)

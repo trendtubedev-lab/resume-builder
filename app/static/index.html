@@ -101,6 +101,10 @@
     <b>Demo mode.</b> No API key on your account, so results use a lightweight offline preview (not the full AI panel). Add your key below for real AI tailoring, or try a sample.
   </div>
 
+  <div id="cc-banner" class="banner hidden" style="background:#e8f5e9;border-color:#a5d6a7;color:#1b5e20">
+    <b>Running on your Claude plan.</b> TailorCV is using your local Claude Code sign-in — no API key needed.
+  </div>
+
   <!-- API key card -->
   <div class="card" id="key-card">
     <label>Your Anthropic API key</label>
@@ -203,6 +207,13 @@ function showApp(){
 }
 
 function renderKeyState(){
+  // claude-code mode: the local CLI runs on the user's own plan — no key UI, no demo.
+  if (me.provider === "claude-code"){
+    $("key-card").classList.add("hidden");
+    $("demo-banner").classList.add("hidden");
+    $("cc-banner").classList.remove("hidden");
+    return;
+  }
   const has = me.has_key;
   $("key-set").classList.toggle("hidden", !has);
   $("key-enter").classList.toggle("hidden", has);
@@ -257,7 +268,7 @@ $("go").onclick = async () => {
   if(!selectedFiles.length) return setStatus("Please add at least one resume.",true);
   if(!job) return setStatus("Please paste the target job description.",true);
   $("go").disabled=true;
-  const wait = me.has_key ? "Reviewers are reading your resume… (~20–40s)" : "Building demo preview…";
+  const wait = me.demo ? "Building demo preview…" : "Reviewers are reading your resume… (~20–40s)";
   setStatus(`<span class="spinner"></span> ${wait}`);
   const fd=new FormData();
   fd.append("job_description",job); fd.append("tone",$("tone").value);

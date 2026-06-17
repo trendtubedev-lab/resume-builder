@@ -2,6 +2,42 @@
 
 Newest entries on top. Each entry: what changed, why, and how it was verified.
 
+## 2026-06-16 (later)
+
+### Added — Pro/Max local mode (PROVIDER switch: api | claude-code)
+- **What:** New provider abstraction so AI calls can route through the user's
+  LOCAL Claude Code CLI on their own Pro/Max plan instead of an Anthropic API
+  key. Selected by `PROVIDER` env (`api` default, `claude-code` for local).
+  - `app/agents.py`: added `complete()` dispatcher + `_api_complete()` /
+    `_claude_code_complete()` (shells out to `claude -p --output-format json`,
+    prompt piped via stdin to dodge OS arg-length limits, runs in a neutral
+    temp cwd so the repo's CLAUDE.md isn't injected, resolves the Windows `.cmd`
+    shim via `shutil.which`). Added `using_claude_code()` and `preflight()`.
+    Refactored `_review_one` / `run_panel` / `synthesize` off the raw SDK client
+    onto `complete()`. max_tokens/temperature don't apply in claude-code mode
+    (CLI doesn't expose them) — noted in code.
+  - `app/main.py`: calls `agents.preflight()` at boot (fail-fast if `claude`
+    missing in claude-code mode); `/api/tailor` treats claude-code as a real run
+    (never demo, no key); `/api/me` returns `provider` and correct `demo` flag.
+  - `app/static/index.html`: hides the API-key card + shows a green "Running on
+    your Claude plan" banner in claude-code mode; wait/demo text keys off `demo`.
+  - `.env.example`: documented `PROVIDER` / `CLAUDE_CODE_TIMEOUT`.
+  - New `QUICKSTART_FRIENDS.md`: friend-facing setup (install Claude Code, sign
+    in with subscription, set `PROVIDER=claude-code` + `AUTH_DISABLED=1`, run).
+- **Why:** Phase-1 trial — a few friends download and run locally on their own
+  Claude plans (no API key, no cost to operator) before hosting for the masses.
+- **Verified (real, host-side):**
+  - `claude -p --output-format json` shape confirmed (text in `.result`); stdin
+    piping + `claude-sonnet-4-6` alias confirmed working.
+  - `py_compile app/agents.py app/main.py` → COMPILE OK.
+  - End-to-end in claude-code mode (haiku, no API key): `run_panel` returned 4
+    scored reviewers (47/52/40/38, overall 44); `synthesize` returned full
+    structured JSON (all expected keys, change_summary populated). END-TO-END OK.
+  - `api` mode: preflight passes, `app.main` imports cleanly via `.venv`.
+- Note: `claude -p` prints a `total_cost_usd` estimate even on a subscription;
+  actual billing depends on the friend's Claude Code login (Pro/Max OAuth =
+  covered by plan). `(unverified)` exact subscription usage-limit behavior.
+
 ## 2026-06-16
 
 ### Added — repo-local memory system + subagent rule

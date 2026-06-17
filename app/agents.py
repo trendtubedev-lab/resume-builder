@@ -13,6 +13,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
+import subprocess
+import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from functools import lru_cache
@@ -24,6 +27,15 @@ log = logging.getLogger("tailorcv")
 
 REVIEWER_MODEL = os.getenv("REVIEWER_MODEL", "claude-sonnet-4-6")
 SYNTH_MODEL = os.getenv("SYNTH_MODEL", "claude-sonnet-4-6")
+
+# Where completions are routed:
+#   "api"         — Anthropic API, using a per-user or server ANTHROPIC_API_KEY (hosted default).
+#   "claude-code" — the user's LOCAL Claude Code CLI, on their own Pro/Max plan (no API key).
+# See QUICKSTART_FRIENDS.md for the local setup.
+PROVIDER = os.getenv("PROVIDER", "api").strip().lower()
+
+# Seconds to wait on a single local `claude -p` call before giving up.
+CC_TIMEOUT = int(os.getenv("CLAUDE_CODE_TIMEOUT", "180"))
 
 # Low temperature for consistent, calibrated output.
 REVIEWER_TEMPERATURE = 0.2
@@ -139,7 +151,108 @@ def _client(api_key: str | None = None) -> anthropic.Anthropic:
     return anthropic.Anthropic(api_key=key)
 
 
-def _review_one(client, persona: Persona, resume_text: str, job: str) -> dict:
+# --- provider layer --------------------------------------------------------
+# Both reviewer and synthesizer go through complete(): it returns the model's
+# raw response text (a JSON object as a string) for _parse_json to handle.
+
+def using_claude_code() -> bool:
+    return PROVIDER in {"claude-code", "claude_code", "cc"}
+
+
+@lru_cache(maxsize=1)
+def _claude_exe() -> str | None:
+    """Resolve the `claude` CLI, handling the Windows .cmd shim via PATHEXT."""
+    return shutil.which("claude")
+
+
+def preflight() -> None:
+    """Validate the selected provider at startup. Raises with a friendly message."""
+    if using_claude_code():
+        if _claude_exe() is None:
+            raise RuntimeError(
+                "PROVIDER=claude-code but the `claude` command was not found. "
+                "Install Claude Code and sign in, then restart. "
+                "See QUICKSTART_FRIENDS.md."
+            )
+        log.info("Provider: claude-code (local Claude Code CLI, user's own plan).")
+    else:
+        log.info("Provider: api (Anthropic API key).")
+
+
+def complete(system: str, user: str, model: str, max_tokens: int,
+             temperature: float, api_key: str | None) -> str:
+    """Return the model's raw text response (expected to be a JSON object)."""
+    if using_claude_code():
+        return _claude_code_complete(system, user, model)
+    return _api_complete(system, user, model, max_tokens, temperature, api_key)
+
+
+def _api_complete(system: str, user: str, model: str, max_tokens: int,
+                  temperature: float, api_key: str | None) -> str:
+    client = _client(api_key)
+    msg = client.messages.create(
+        model=model,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        system=system,
+        messages=[
+            {"role": "user", "content": user},
+            {"role": "assistant", "content": "{"},  # prefill forces clean JSON
+        ],
+    )
+    return "{" + _text(msg)
+
+
+def _claude_code_complete(system: str, user: str, model: str) -> str:
+    """Run one completion through the local Claude Code CLI on the user's plan.
+
+    Notes:
+    - max_tokens / temperature are not exposed by `claude -p`, so they don't
+      apply here; the model's defaults are used.
+    - The prompt is piped via stdin (not argv) to avoid OS command-line length
+      limits on large resumes/job descriptions.
+    - We run in a neutral temp cwd so the project's own CLAUDE.md is not
+      injected into the prompt context.
+    """
+    exe = _claude_exe()
+    if exe is None:
+        raise RuntimeError(
+            "`claude` command not found. Install Claude Code and sign in "
+            "(see QUICKSTART_FRIENDS.md)."
+        )
+    prompt = (
+        f"{system}\n\n{user}\n\n"
+        "Respond with ONLY the JSON object — no markdown fences, no preamble."
+    )
+    try:
+        proc = subprocess.run(
+            [exe, "-p", "--output-format", "json", "--model", model],
+            input=prompt,
+            capture_output=True,
+            text=True,
+            timeout=CC_TIMEOUT,
+            cwd=tempfile.gettempdir(),
+        )
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(f"Claude Code timed out after {CC_TIMEOUT}s.") from e
+    if proc.returncode != 0:
+        tail = (proc.stderr or proc.stdout or "").strip()[-400:]
+        raise RuntimeError(
+            "Claude Code call failed. Are you signed in? Run `claude` once to log in. "
+            f"(exit {proc.returncode}) {tail}"
+        )
+    try:
+        payload = json.loads(proc.stdout)
+    except json.JSONDecodeError as e:
+        raise RuntimeError("Could not parse Claude Code output as JSON.") from e
+    if payload.get("is_error") or payload.get("subtype") != "success":
+        raise RuntimeError(
+            f"Claude Code returned an error: {payload.get('result') or payload.get('subtype')}"
+        )
+    return str(payload.get("result", ""))
+
+
+def _review_one(persona: Persona, resume_text: str, job: str, api_key: str | None) -> dict:
     prompt = f"""Your lens: {persona.name}. {persona.brief}
 
 Review the candidate's resume(s) below against the TARGET JOB through that lens only.
@@ -165,17 +278,9 @@ Output a JSON object of exactly this shape (no other text):
   "gaps": [<up to 5 short strings: missing skills, keywords, or evidence>],
   "suggestions": [<up to 6 short, actionable rewrite suggestions>]
 }}"""
-    msg = client.messages.create(
-        model=REVIEWER_MODEL,
-        max_tokens=2000,
-        temperature=REVIEWER_TEMPERATURE,
-        system=REVIEWER_SYSTEM,
-        messages=[
-            {"role": "user", "content": prompt},
-            {"role": "assistant", "content": "{"},  # prefill forces clean JSON
-        ],
-    )
-    data = _parse_json("{" + _text(msg))
+    raw = complete(REVIEWER_SYSTEM, prompt, REVIEWER_MODEL, 2000,
+                   REVIEWER_TEMPERATURE, api_key)
+    data = _parse_json(raw)
     data["persona"] = persona.name
     data["key"] = persona.key
     return data
@@ -183,11 +288,10 @@ Output a JSON object of exactly this shape (no other text):
 
 def run_panel(resume_text: str, job: str, api_key: str | None = None) -> list[dict]:
     """Run all reviewer personas in parallel. Returns a list of critiques."""
-    client = _client(api_key)
     results: list[dict] = []
     with ThreadPoolExecutor(max_workers=len(PERSONAS)) as ex:
         futures = {
-            ex.submit(_review_one, client, p, resume_text, job): p for p in PERSONAS
+            ex.submit(_review_one, p, resume_text, job, api_key): p for p in PERSONAS
         }
         for fut in as_completed(futures):
             p = futures[fut]
@@ -213,7 +317,6 @@ def run_panel(resume_text: str, job: str, api_key: str | None = None) -> list[di
 def synthesize(resume_text: str, job: str, panel: list[dict], tone: str = "professional",
                api_key: str | None = None) -> dict:
     """Rewrite the resume into a tailored version using the panel's feedback."""
-    client = _client(api_key)
     panel_json = json.dumps(panel, indent=2)
     prompt = f"""Rewrite the candidate's resume into a SINGLE tailored version optimized
 for the target job, acting on the review panel's feedback. Tone: {tone}.
@@ -260,17 +363,8 @@ Output a JSON object of exactly this shape (no other text):
   ],
   "change_summary": [<3-6 short strings describing the key tailoring changes you made>]
 }}"""
-    msg = client.messages.create(
-        model=SYNTH_MODEL,
-        max_tokens=8000,
-        temperature=SYNTH_TEMPERATURE,
-        system=SYNTH_SYSTEM,
-        messages=[
-            {"role": "user", "content": prompt},
-            {"role": "assistant", "content": "{"},  # prefill forces clean JSON
-        ],
-    )
-    return _parse_json("{" + _text(msg))
+    raw = complete(SYNTH_SYSTEM, prompt, SYNTH_MODEL, 8000, SYNTH_TEMPERATURE, api_key)
+    return _parse_json(raw)
 
 
 def overall_score(panel: list[dict]) -> int | None:
