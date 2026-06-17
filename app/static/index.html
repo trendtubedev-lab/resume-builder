@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>TailorCV — Resume Tailoring</title>
+<link rel="icon" type="image/x-icon" href="/static/favicon.ico" />
 <style>
   :root {
     --accent: #1a4d7a; --accent-2: #2a6fb0; --bg: #f4f6f9; --card: #ffffff;
@@ -66,18 +67,223 @@
   .gbtn { display:inline-flex; align-items:center; gap:10px; background:#fff; color:#3c4043; border:1px solid #dadce0; border-radius:8px; padding:12px 20px; font-size:15px; font-weight:600; cursor:pointer; text-decoration:none; }
   .gbtn:hover { background:#f7f8f8; }
   .center { text-align:center; }
+  /* Manage Reviewers */
+  .rv-shell { display:flex; gap:16px; flex-wrap:wrap; }
+  .rv-list { flex:0 0 200px; display:flex; flex-direction:column; gap:6px; }
+  .rv-item { padding:10px 12px; border:1px solid var(--border); border-radius:8px; cursor:pointer; font-size:14px; background:#fff; display:flex; align-items:center; justify-content:space-between; gap:6px; }
+  .rv-item:hover { border-color:var(--accent-2); }
+  .rv-item.active { border-color:var(--accent); background:#eef3f8; font-weight:600; }
+  .rv-item .lock { font-size:11px; color:var(--muted); }
+  .rv-form { flex:1; min-width:260px; }
+  .rv-form input, .rv-form textarea { margin-bottom:10px; }
+  .rv-form textarea { min-height:110px; }
+  .rv-actions { display:flex; gap:8px; flex-wrap:wrap; }
+  button.danger { background:#fff; border:1px solid #f5c2c2; color:#a12020; border-radius:8px; padding:10px 16px; font-weight:600; cursor:pointer; }
+  button.danger:hover { background:#fdecec; }
+  .collapse-toggle { background:none; border:none; cursor:pointer; font-size:13px; font-weight:600; color:var(--accent); padding:0; display:flex; align-items:center; gap:4px; }
+  .rv-card { padding:10px 22px; }
+  .rv-card.open { padding:22px; }
+  .rv-msg { font-size:13px; margin-top:6px; min-height:18px; }
+
+  /* Help button */
+  .help-btn { background:rgba(255,255,255,.2); border:1px solid rgba(255,255,255,.4); border-radius:50%; width:32px; height:32px; color:#fff; font-size:16px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; line-height:1; }
+  .help-btn:hover { background:rgba(255,255,255,.35); }
+
+  /* Help modal */
+  .help-overlay { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:1000; display:flex; align-items:center; justify-content:center; padding:16px; }
+  .help-overlay.hidden { display:none; }
+  .help-card { background:var(--card); border-radius:14px; width:100%; max-width:680px; max-height:88vh; display:flex; flex-direction:column; box-shadow:0 8px 32px rgba(0,0,0,.18); overflow:hidden; }
+  .help-head { display:flex; align-items:center; justify-content:space-between; padding:18px 22px 14px; border-bottom:1px solid var(--border); flex-shrink:0; }
+  .help-head h2 { margin:0; font-size:18px; color:var(--accent); }
+  .help-close { background:none; border:none; font-size:22px; cursor:pointer; color:var(--muted); line-height:1; padding:0 4px; }
+  .help-close:hover { color:var(--text); }
+  .help-tabs { display:flex; gap:0; overflow-x:auto; border-bottom:1px solid var(--border); flex-shrink:0; padding:0 22px; scrollbar-width:none; }
+  .help-tabs::-webkit-scrollbar { display:none; }
+  .help-tab { background:none; border:none; border-bottom:3px solid transparent; padding:10px 14px; font-size:14px; font-weight:600; color:var(--muted); cursor:pointer; white-space:nowrap; margin-bottom:-1px; }
+  .help-tab.active { border-bottom-color:var(--accent); color:var(--accent); }
+  .help-body { overflow-y:auto; padding:22px; flex:1; }
+  .help-body h3 { margin:0 0 8px; font-size:15px; color:var(--accent); }
+  .help-body h4 { margin:14px 0 4px; font-size:14px; color:var(--text); }
+  .help-body p { margin:0 0 10px; font-size:14px; line-height:1.6; }
+  .help-body ol, .help-body ul { margin:0 0 10px; padding-left:22px; font-size:14px; line-height:1.7; }
+  .help-body li { margin-bottom:2px; }
+  .help-body .help-step { display:flex; gap:12px; margin-bottom:12px; align-items:flex-start; }
+  .help-body .step-num { background:var(--accent); color:#fff; border-radius:50%; width:24px; height:24px; font-size:13px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px; }
+  .help-body .step-text { flex:1; font-size:14px; line-height:1.6; }
+  .help-body .step-text b { display:block; margin-bottom:2px; }
+  .help-panel { border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:12px; }
+  .help-panel h4 { margin:0 0 6px; font-size:14px; color:var(--accent); }
+  .help-panel p { margin:0; font-size:13px; line-height:1.6; }
+  .help-trouble { border-left:3px solid var(--warn); background:#fffaf2; border-radius:0 8px 8px 0; padding:10px 14px; margin-bottom:12px; }
+  .help-trouble b { display:block; font-size:14px; margin-bottom:3px; }
+  .help-trouble p { margin:0; font-size:13px; color:var(--muted); line-height:1.6; }
+  .help-faq { margin-bottom:14px; }
+  .help-faq b { display:block; font-size:14px; margin-bottom:4px; }
+  .help-faq p { margin:0; font-size:13px; line-height:1.6; color:var(--muted); }
 </style>
 </head>
 <body>
 <header>
   <div class="hbar">
-    <div>
-      <h1>TailorCV</h1>
-      <p>A panel of AI reviewers tailors your resume to the job.</p>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <img src="/static/logo_icon.png" alt="TailorCV" style="height:48px;width:auto;" />
+      <div>
+        <h1 style="margin:0;font-size:22px;">TailorCV</h1>
+        <p style="margin:3px 0 0;opacity:.85;font-size:12px;">A panel of AI reviewers tailors your resume to the job.</p>
+      </div>
     </div>
-    <div class="userbox" id="userbox"></div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button class="help-btn" id="help-open" title="Help">?</button>
+      <div class="userbox" id="userbox"></div>
+    </div>
   </div>
 </header>
+
+<!-- HELP MODAL -->
+<div class="help-overlay hidden" id="help-overlay">
+  <div class="help-card" role="dialog" aria-modal="true" aria-label="Help">
+    <div class="help-head">
+      <h2>TailorCV Help</h2>
+      <button class="help-close" id="help-close" aria-label="Close">&#x2715;</button>
+    </div>
+    <div class="help-tabs" role="tablist">
+      <button class="help-tab active" data-tab="how">How to use</button>
+      <button class="help-tab" data-tab="panel">Review panel</button>
+      <button class="help-tab" data-tab="trouble">Troubleshooting</button>
+      <button class="help-tab" data-tab="faq">FAQ</button>
+    </div>
+    <div class="help-body">
+
+      <!-- HOW TO USE -->
+      <div data-pane="how">
+        <h3>Getting started</h3>
+        <div class="help-step">
+          <div class="step-num">1</div>
+          <div class="step-text"><b>Upload your resume</b> Drag and drop or click the upload area. PDF, Word (.docx), and plain text (.txt) files all work. You can upload up to 3 versions at once — useful if you have different resumes for different roles.</div>
+        </div>
+        <div class="help-step">
+          <div class="step-num">2</div>
+          <div class="step-text"><b>Paste the job description</b> Copy the full job posting — title, responsibilities, requirements — and paste it into the job description box. The more detail you include, the better the tailoring.</div>
+        </div>
+        <div class="help-step">
+          <div class="step-num">3</div>
+          <div class="step-text"><b>Pick a tone</b> Choose how you want the final resume to read. "Professional" is a safe default. "Impactful" emphasizes results and numbers. "Concise" trims to essentials. "Executive / senior" uses leadership-level language.</div>
+        </div>
+        <div class="help-step">
+          <div class="step-num">4</div>
+          <div class="step-text"><b>Click "Tailor my resume"</b> The AI panel will read your resume and the job posting. This usually takes 20–40 seconds when using the full AI. A progress message will appear while it works.</div>
+        </div>
+        <div class="help-step">
+          <div class="step-num">5</div>
+          <div class="step-text"><b>Read the panel results</b> Each reviewer gives you a score, highlights strengths, flags gaps, and suggests specific improvements. Scroll down to see what changed and preview the tailored resume.</div>
+        </div>
+        <div class="help-step">
+          <div class="step-num">6</div>
+          <div class="step-text"><b>Download your resume</b> Choose PDF or Word format and click Download. The file is ready to submit immediately.</div>
+        </div>
+      </div>
+
+      <!-- REVIEW PANEL -->
+      <div data-pane="panel" class="hidden">
+        <h3>What the review panel does</h3>
+        <p>Four AI reviewers each read your resume through a different lens. Their job is to catch what you'd miss if you only read your own resume.</p>
+
+        <div class="help-panel">
+          <h4>Technical Recruiter</h4>
+          <p>Reads your resume the way a recruiter skimming dozens of applications would. Looks for clear job titles, relevant experience, readable formatting, and whether your background matches the role at a glance. A low score here means the resume won't make it past the first filter.</p>
+        </div>
+        <div class="help-panel">
+          <h4>ATS / Keyword Specialist</h4>
+          <p>Most companies use Applicant Tracking Systems that scan resumes for keywords before a human ever sees them. This reviewer checks whether the right skills, tools, and phrases from the job description appear in your resume — and flags what's missing.</p>
+        </div>
+        <div class="help-panel">
+          <h4>Hiring Manager</h4>
+          <p>Reads as the person who actually needs to fill this role. Focuses on whether your experience shows real impact, whether your accomplishments are specific and measurable, and whether you sound like someone who can do this job — not just someone who has done similar jobs.</p>
+        </div>
+        <div class="help-panel">
+          <h4>Professional Resume Editor</h4>
+          <p>Checks the writing itself: clarity, conciseness, action verbs, consistency, and anything that sounds vague or overly generic. Flags filler phrases ("responsible for," "helped with") and suggests sharper language.</p>
+        </div>
+
+        <h3 style="margin-top:18px">What the numbers mean</h3>
+        <p><b>Panel match score (before tailoring)</b> — the overall score shown at the top is how well your original resume matched the job, before any changes. It's a starting-point diagnostic, not a final grade. The tailored resume is always stronger than this number suggests.</p>
+        <p><b>Individual reviewer scores</b> — each reviewer's score (shown top-right of their card) reflects how well your resume performed on that reviewer's specific criteria. Scores under 60 usually mean there's meaningful room to improve on that dimension.</p>
+        <p><b>Strengths</b> — things your resume already does well for this role. Keep them.</p>
+        <p><b>Gaps</b> — things the job requires that your resume doesn't address. The tailored resume will try to surface relevant experience that covers these.</p>
+        <p><b>Suggestions</b> — specific rewrites or additions the reviewer recommends.</p>
+      </div>
+
+      <!-- TROUBLESHOOTING -->
+      <div data-pane="trouble" class="hidden">
+        <h3>Common problems</h3>
+
+        <div class="help-trouble">
+          <b>Yellow "Demo mode" banner instead of a green confirmation</b>
+          <p>Demo mode means no API key is set on your account. The results use a lightweight offline preview — not the full AI panel. To enable real AI tailoring, add your Anthropic API key in the key field above the upload area. Get a free key at console.anthropic.com.</p>
+        </div>
+
+        <div class="help-trouble">
+          <b>"Are you signed in?" error or page reloads unexpectedly</b>
+          <p>Your session has expired. Refresh the page and sign in again with Google. If the sign-in button isn't showing, make sure cookies are enabled in your browser and you're not in private/incognito mode.</p>
+        </div>
+
+        <div class="help-trouble">
+          <b>Timeout error ("Something went wrong" after a long wait)</b>
+          <p>The AI panel can take 30–60 seconds. If it times out, try again — occasional timeouts are normal. If it keeps failing, check that your API key is valid at console.anthropic.com and that your account has available credits.</p>
+        </div>
+
+        <div class="help-trouble">
+          <b>File won't upload</b>
+          <p>Only PDF, Word (.docx), and plain text (.txt) files are supported. Make sure the file isn't password-protected. Files larger than a few MB may be rejected — try saving as plain text if the PDF is very large. You can upload up to 3 files total.</p>
+        </div>
+
+        <div class="help-trouble">
+          <b>Download not working</b>
+          <p>The download button appears after a successful tailor run. If nothing happens when you click it, check your browser's download settings and make sure pop-ups aren't being blocked. Try switching between PDF and Word format — one may work when the other doesn't.</p>
+        </div>
+      </div>
+
+      <!-- FAQ -->
+      <div data-pane="faq" class="hidden">
+        <h3>Frequently asked questions</h3>
+
+        <div class="help-faq">
+          <b>Is my resume stored anywhere?</b>
+          <p>No. Your resume is processed in memory during the session and never written to disk or saved to a database. When your session ends, it's gone.</p>
+        </div>
+        <div class="help-faq">
+          <b>What file types are supported?</b>
+          <p>PDF, Word (.docx), and plain text (.txt). If your resume is in another format, copy the text and save it as a .txt file.</p>
+        </div>
+        <div class="help-faq">
+          <b>Can I upload more than one resume?</b>
+          <p>Yes — up to 3 files at once. This is useful if you have different versions of your resume (one focused on technical skills, one on leadership, etc.). The panel will consider all of them and draw from whichever content fits the job best.</p>
+        </div>
+        <div class="help-faq">
+          <b>What does the score mean?</b>
+          <p>The panel match score reflects how well your original resume matched the job posting — before any tailoring. Think of it as the starting point. The tailored resume the app produces is always stronger than the score suggests, because the score measures the input, not the output.</p>
+        </div>
+        <div class="help-faq">
+          <b>Will it make up things that aren't on my resume?</b>
+          <p>No. TailorCV only rephrases and reorders content that's already there. It will highlight relevant experience more prominently and sharpen the language, but it won't invent jobs, skills, or accomplishments you don't have.</p>
+        </div>
+        <div class="help-faq">
+          <b>What's demo mode?</b>
+          <p>Demo mode is an offline preview that runs when no API key is set. It shows the structure of the output but uses placeholder-quality AI rather than the full Claude panel. Add your Anthropic API key to unlock real tailoring.</p>
+        </div>
+        <div class="help-faq">
+          <b>How much does it cost to run?</b>
+          <p>Each tailor run makes roughly 5 API calls — one per reviewer plus one for the final rewrite. With Claude Haiku or Sonnet, this typically costs a few cents per run. Check your Anthropic console for exact usage.</p>
+        </div>
+        <div class="help-faq">
+          <b>Can I customize the reviewers?</b>
+          <p>Yes. Click "Manage reviewers" at the top of the app to edit any of the four default reviewers or add your own. You can write custom instructions for any persona — for example, a "Startup Culture Fit" reviewer or one focused on your specific industry.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
 
 <!-- LOGIN VIEW -->
 <div class="wrap hidden" id="login-view">
@@ -97,6 +303,35 @@
 
 <!-- APP VIEW -->
 <div class="wrap hidden" id="app-view">
+
+  <!-- Manage Reviewers (collapsed by default — slim bar) -->
+  <div class="card rv-card" id="rv-card">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-size:13px;font-weight:600;color:var(--muted)">Reviewers</span>
+      <button class="collapse-toggle" id="rv-toggle" aria-expanded="false">⚙ Manage reviewers ▸</button>
+    </div>
+    <div id="rv-body" class="hidden" style="margin-top:16px">
+      <div class="rv-shell">
+        <div class="rv-list" id="rv-list"></div>
+        <div class="rv-form">
+          <label style="margin-bottom:4px">Name</label>
+          <input type="text" id="rv-name" maxlength="80" placeholder="e.g. Compensation Specialist" />
+          <label style="margin-bottom:4px">Reviewer brief <span class="hint">— the instructions this reviewer follows</span></label>
+          <textarea id="rv-brief" maxlength="2000" placeholder="Describe what this reviewer focuses on…"></textarea>
+          <div class="rv-actions">
+            <button class="ghost" id="rv-save">Save</button>
+            <button class="danger hidden" id="rv-delete">Delete</button>
+            <button class="ghost" id="rv-reset" title="Reset to preset defaults" style="display:none">Reset to default</button>
+          </div>
+          <div class="rv-msg" id="rv-msg"></div>
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        <button class="ghost" id="rv-new">+ Add reviewer</button>
+      </div>
+    </div>
+  </div>
+
   <div id="demo-banner" class="banner hidden">
     <b>Demo mode.</b> No API key on your account, so results use a lightweight offline preview (not the full AI panel). Add your key below for real AI tailoring, or try a sample.
   </div>
@@ -318,6 +553,145 @@ function previewHTML(r){
   return h;
 }
 function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+// ── Manage Reviewers ────────────────────────────────────────────────────────
+let rvPersonas = [], rvSelected = null, rvIsNew = false;
+
+const PRESET_DEFAULTS = {}; // populated after first load for reset-to-default
+
+$("rv-toggle").onclick = () => {
+  const opening = $("rv-body").classList.toggle("hidden");
+  // opening=true means it was hidden and is now shown (classList.toggle returns new state)
+  const isOpen = !opening;
+  $("rv-toggle").textContent = isOpen ? "⚙ Manage reviewers ▾" : "⚙ Manage reviewers ▸";
+  $("rv-toggle").setAttribute("aria-expanded", String(isOpen));
+  $("rv-card").classList.toggle("open", isOpen);
+  if (isOpen && rvPersonas.length === 0) loadReviewers();
+};
+
+async function loadReviewers() {
+  try {
+    const d = await (await fetch("/api/personas")).json();
+    rvPersonas = d.personas || [];
+    rvPersonas.forEach(p => { if (p.is_preset && !PRESET_DEFAULTS[p.key]) PRESET_DEFAULTS[p.key] = {name: p.name, brief: p.brief}; });
+    renderRvList();
+    if (rvSelected) {
+      const still = rvPersonas.find(p => p.key === rvSelected.key);
+      if (still) selectReviewer(still); else clearRvForm();
+    }
+  } catch(e) { rvMsg("Could not load reviewers.", true); }
+}
+
+function renderRvList() {
+  $("rv-list").innerHTML = rvPersonas.map(p => `
+    <div class="rv-item${rvSelected && rvSelected.key===p.key?' active':''}" data-key="${esc(p.key)}">
+      <span>${esc(p.name)}</span>
+      ${p.is_preset ? '<span class="lock" title="Preset reviewer">🔒</span>' : ''}
+    </div>`).join("");
+  document.querySelectorAll(".rv-item").forEach(el => {
+    el.onclick = () => {
+      rvIsNew = false;
+      selectReviewer(rvPersonas.find(p => p.key === el.dataset.key));
+    };
+  });
+}
+
+function selectReviewer(p) {
+  rvSelected = p;
+  $("rv-name").value = p.name;
+  $("rv-brief").value = p.brief;
+  $("rv-delete").classList.toggle("hidden", p.is_preset);
+  $("rv-reset").style.display = p.is_preset ? "inline-block" : "none";
+  rvMsg("");
+  renderRvList();
+}
+
+function clearRvForm() {
+  rvSelected = null; rvIsNew = false;
+  $("rv-name").value = ""; $("rv-brief").value = "";
+  $("rv-delete").classList.add("hidden");
+  $("rv-reset").style.display = "none";
+  rvMsg(""); renderRvList();
+}
+
+$("rv-new").onclick = () => {
+  rvIsNew = true; rvSelected = null;
+  $("rv-name").value = ""; $("rv-brief").value = "";
+  $("rv-delete").classList.add("hidden");
+  $("rv-reset").style.display = "none";
+  rvMsg(""); renderRvList();
+  $("rv-name").focus();
+};
+
+$("rv-save").onclick = async () => {
+  const name = $("rv-name").value.trim();
+  const brief = $("rv-brief").value.trim();
+  if (!name || !brief) return rvMsg("Name and brief are required.", true);
+  rvMsg("Saving…");
+  try {
+    let res, d;
+    if (rvIsNew) {
+      res = await fetch("/api/personas", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({name, brief})});
+    } else {
+      res = await fetch(`/api/personas/${encodeURIComponent(rvSelected.key)}`, {method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify({name, brief})});
+    }
+    d = await res.json();
+    if (!res.ok) return rvMsg(d.detail || "Save failed.", true);
+    rvIsNew = false;
+    rvSelected = d;
+    rvMsg("Saved.");
+    await loadReviewers();
+  } catch(e) { rvMsg("Save failed.", true); }
+};
+
+$("rv-delete").onclick = async () => {
+  if (!rvSelected || rvSelected.is_preset) return;
+  if (!confirm(`Delete "${rvSelected.name}"? This cannot be undone.`)) return;
+  try {
+    const res = await fetch(`/api/personas/${encodeURIComponent(rvSelected.key)}`, {method:"DELETE"});
+    if (!res.ok) { const d=await res.json(); return rvMsg(d.detail||"Delete failed.", true); }
+    clearRvForm(); await loadReviewers();
+  } catch(e) { rvMsg("Delete failed.", true); }
+};
+
+$("rv-reset").onclick = async () => {
+  if (!rvSelected || !rvSelected.is_preset) return;
+  const def = PRESET_DEFAULTS[rvSelected.key];
+  if (!def) return;
+  if (!confirm(`Reset "${rvSelected.name}" to its original preset values?`)) return;
+  const res = await fetch(`/api/personas/${encodeURIComponent(rvSelected.key)}`, {method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(def)});
+  if (res.ok) { rvMsg("Reset to default."); await loadReviewers(); }
+  else rvMsg("Reset failed.", true);
+};
+
+function rvMsg(m, err) {
+  const el = $("rv-msg");
+  el.innerHTML = err ? `<span style="color:#a12020">${esc(m)}</span>` : esc(m);
+}
+
+// ── Help modal ───────────────────────────────────────────────────────────────
+(function(){
+  const overlay = $("help-overlay");
+  function openHelp(){ overlay.classList.remove("hidden"); document.body.style.overflow="hidden"; }
+  function closeHelp(){ overlay.classList.add("hidden"); document.body.style.overflow=""; }
+
+  $("help-open").onclick = openHelp;
+  $("help-close").onclick = closeHelp;
+  overlay.addEventListener("click", e => { if(e.target === overlay) closeHelp(); });
+  document.addEventListener("keydown", e => { if(e.key === "Escape" && !overlay.classList.contains("hidden")) closeHelp(); });
+
+  // Tab switching
+  document.querySelectorAll(".help-tab").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".help-tab").forEach(t => t.classList.remove("active"));
+      btn.classList.add("active");
+      const target = btn.dataset.tab;
+      document.querySelectorAll(".help-body [data-pane]").forEach(pane => {
+        pane.classList.toggle("hidden", pane.dataset.pane !== target);
+      });
+    });
+  });
+})();
 </script>
 </body>
 </html>

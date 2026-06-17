@@ -24,9 +24,10 @@ load_dotenv()
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Body
 from fastapi.responses import HTMLResponse, Response, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import agents, auth, demo, export, parsing
+from . import agents, auth, db, demo, export, parsing, personas
 
 log = logging.getLogger("tailorcv")
 
@@ -68,6 +69,7 @@ def resolve_session_secret() -> str:
 
 
 app = FastAPI(title="TailorCV")
+app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 app.add_middleware(
     SessionMiddleware,
     secret_key=resolve_session_secret(),
@@ -79,6 +81,9 @@ app.include_router(auth.router)
 # Validate the selected completion provider at boot (e.g. claude-code mode
 # requires the `claude` CLI on PATH). Fails fast with a friendly message.
 agents.preflight()
+
+# Ensure DB tables exist.
+db.init_db()
 
 # In-memory store of generated resumes, keyed by job id.
 # For a hosted multi-user service, swap this for Redis or a DB (see README).
@@ -243,7 +248,7 @@ async def tailor(
             panel = demo.demo_panel(resume_text, job_description)
             resume = demo.demo_synthesize(resume_text, job_description, tone)
         else:
-            panel = agents.run_panel(resume_text, job_description, api_key=key)
+            panel = agents.run_panel(resume_text, job_description, api_key=key, user_email=user["email"])
             resume = agents.synthesize(resume_text, job_description, panel, tone, api_key=key)
     except RuntimeError as e:
         raise HTTPException(503, str(e))
@@ -286,6 +291,70 @@ def download(request: Request, job_id: str, format: str = "pdf"):
             headers={"Content-Disposition": f'attachment; filename="{name}_tailored.pdf"'},
         )
     raise HTTPException(400, "format must be 'pdf' or 'docx'.")
+
+
+@app.get("/api/personas")
+def list_personas(request: Request) -> dict:
+    user = auth.require_user(request)
+    ps = personas.get_personas(user["email"])
+    return {"personas": [
+        {"key": p.key, "name": p.name, "brief": p.brief, "is_preset": p.is_preset}
+        for p in ps
+    ]}
+
+
+@app.post("/api/personas")
+def create_persona(request: Request, body: dict = Body(...)) -> dict:
+    user = auth.require_user(request)
+    name = (body.get("name") or "").strip()
+    brief = (body.get("brief") or "").strip()
+    if not name or not brief:
+        raise HTTPException(400, "name and brief are required.")
+    if len(name) > 80:
+        raise HTTPException(400, "name must be 80 characters or fewer.")
+    if len(brief) > 2000:
+        raise HTTPException(400, "brief must be 2000 characters or fewer.")
+    # Derive a key from the name; ensure it doesn't collide with a preset.
+    import re as _re
+    key = _re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")[:40]
+    if not key:
+        raise HTTPException(400, "Could not derive a valid key from the name.")
+    existing = {p.key for p in personas.get_personas(user["email"])}
+    if key in existing:
+        key = key + "_custom"
+    db.upsert_persona(user["email"], key, name, brief)
+    return {"key": key, "name": name, "brief": brief, "is_preset": False}
+
+
+@app.put("/api/personas/{key}")
+def update_persona(request: Request, key: str, body: dict = Body(...)) -> dict:
+    user = auth.require_user(request)
+    name = (body.get("name") or "").strip()
+    brief = (body.get("brief") or "").strip()
+    if not name or not brief:
+        raise HTTPException(400, "name and brief are required.")
+    if len(name) > 80:
+        raise HTTPException(400, "name must be 80 characters or fewer.")
+    if len(brief) > 2000:
+        raise HTTPException(400, "brief must be 2000 characters or fewer.")
+    # Allowed for both presets (override) and custom personas.
+    all_keys = {p.key for p in personas.get_personas(user["email"])}
+    if key not in all_keys:
+        raise HTTPException(404, "Persona not found.")
+    db.upsert_persona(user["email"], key, name, brief)
+    return {"key": key, "name": name, "brief": brief,
+            "is_preset": key in personas.preset_keys()}
+
+
+@app.delete("/api/personas/{key}")
+def delete_persona(request: Request, key: str) -> dict:
+    user = auth.require_user(request)
+    if key in personas.preset_keys():
+        raise HTTPException(400, "Preset reviewers cannot be deleted.")
+    removed = db.delete_persona(user["email"], key)
+    if not removed:
+        raise HTTPException(404, "Persona not found.")
+    return {"ok": True}
 
 
 def run():

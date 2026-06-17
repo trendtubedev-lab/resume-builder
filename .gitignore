@@ -7,3 +7,9 @@ output/
 *.docx
 *.pdf
 .DS_Store
+
+# SQLite app data (auto-created on startup; treat as local/production data)
+data/
+
+# Ship the install guide despite the *.pdf rule above
+!docs/TailorCV_Install_Guide.pdf

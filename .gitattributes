@@ -1,0 +1,5 @@
+# Treat these as binary — never apply line-ending conversion
+*.pdf binary
+*.png binary
+*.ico binary
+*.docx binary

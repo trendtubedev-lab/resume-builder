@@ -71,37 +71,11 @@ class Persona:
     brief: str
 
 
-# The review panel. Each persona reviews independently with NO shared context,
-# mirroring the "review-panel" approach: distinct lenses, no groupthink.
-PERSONAS = [
-    Persona(
-        "recruiter",
-        "Technical Recruiter",
-        "You screen hundreds of resumes a week. You care about clarity, relevance "
-        "to the role, signal-to-noise, and whether you'd pass this candidate to the "
-        "hiring manager in the first 10 seconds.",
-    ),
-    Persona(
-        "ats",
-        "ATS / Keyword Specialist",
-        "You optimize resumes to pass Applicant Tracking Systems. You compare the "
-        "resume against the job description for missing hard keywords, skills, "
-        "titles, and phrasing that the ATS and recruiters search for.",
-    ),
-    Persona(
-        "hiring_manager",
-        "Hiring Manager",
-        "You will manage this person. You care about demonstrated impact, "
-        "quantified results, scope/seniority fit, and evidence they can do THIS job. "
-        "You are skeptical of fluff and unsupported claims.",
-    ),
-    Persona(
-        "editor",
-        "Professional Resume Editor",
-        "You care about writing quality: strong action verbs, concise bullets, "
-        "consistency, formatting, and removing clichés and weak language.",
-    ),
-]
+# Personas are loaded dynamically from personas.py (presets + per-user custom).
+# Import lazily to avoid circular imports at module load time.
+def _load_personas(user_email: str) -> list[Persona]:
+    from app.personas import get_personas
+    return [Persona(p.key, p.name, p.brief) for p in get_personas(user_email)]
 
 
 def _truthy(name: str) -> bool:
@@ -253,6 +227,7 @@ def _claude_code_complete(system: str, user: str, model: str) -> str:
             input=prompt,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=timeout,
             cwd=tempfile.gettempdir(),
         )
@@ -311,12 +286,14 @@ Output a JSON object of exactly this shape (no other text):
     return data
 
 
-def run_panel(resume_text: str, job: str, api_key: str | None = None) -> list[dict]:
+def run_panel(resume_text: str, job: str, api_key: str | None = None,
+              user_email: str = "local@localhost") -> list[dict]:
     """Run all reviewer personas in parallel. Returns a list of critiques."""
+    panel_personas = _load_personas(user_email)
     results: list[dict] = []
-    with ThreadPoolExecutor(max_workers=len(PERSONAS)) as ex:
+    with ThreadPoolExecutor(max_workers=len(panel_personas)) as ex:
         futures = {
-            ex.submit(_review_one, p, resume_text, job, api_key): p for p in PERSONAS
+            ex.submit(_review_one, p, resume_text, job, api_key): p for p in panel_personas
         }
         for fut in as_completed(futures):
             p = futures[fut]
@@ -333,8 +310,7 @@ def run_panel(resume_text: str, job: str, api_key: str | None = None) -> list[di
                         "suggestions": [],
                     }
                 )
-    # Keep a stable persona order.
-    order = {p.key: i for i, p in enumerate(PERSONAS)}
+    order = {p.key: i for i, p in enumerate(panel_personas)}
     results.sort(key=lambda r: order.get(r.get("key"), 99))
     return results
 

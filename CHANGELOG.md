@@ -2,6 +2,51 @@
 
 Newest entries on top. Each entry: what changed, why, and how it was verified.
 
+## 2026-06-17 — Add TailorCV logo (header, favicon, PDF cover)
+
+- **What:** Integrated the brand logo across the app. New assets in `app/static/`: `logo.png` (full 2048×2048 master from Nano Banana), `logo_icon.png` (655×655 transparent square icon, cropped from master), `logo_icon_flat.png` (same icon flattened on white for print), `favicon.ico`. Mounted `/static` via `StaticFiles` in `app/main.py`. Header (`index.html`) shows the icon mark + "TailorCV" wordmark; browser tab uses the favicon; PDF cover (`scripts/generate_install_guide.py`) shows the flat icon above the title banner.
+- **Why:** Branding for the public release.
+- **Gotcha fixed:** First pass used the full master image (contained both icon + wordmark variants + transparency) → showed a checkerboard and double "TailorCV" in both header and PDF. Fixed by detecting the navy square's bounding box programmatically and cropping a tight 655×655 icon; flat (RGB, no alpha) version used in PDF to avoid the transparency checkerboard.
+- **Verified:** Crop confirmed square (ratio 1.0), flat version is RGB with navy edge-to-edge corners (no transparency). Michael visually approved both the rendered PDF cover and the webpage header.
+
+## 2026-06-16 — Add GitHub installation guide PDF
+
+- **What:** `docs/TailorCV_Install_Guide.pdf` — generated via `scripts/generate_install_guide.py` (reportlab). Covers: what TailorCV is, two setup paths (Claude plan vs API key), download/install steps, usage walkthrough, FAQ (8 questions), troubleshooting table, stop/restart instructions.
+- **Why:** User-requested downloadable guide for the public GitHub repo.
+- **Verified:** PDF generated successfully at `docs/TailorCV_Install_Guide.pdf`.
+
+## 2026-06-16 — Add in-app Help modal
+
+- **What:** Tabbed Help modal (How to use / Review panel / Troubleshooting / FAQ) triggered by a `?` button in the app header. Vanilla JS + CSS only, no new dependencies. Modal closes on overlay click or Escape key. Tabs scroll horizontally on narrow screens. All content written for end users, not developers.
+- **Why:** User-requested in-app documentation.
+- **Verified:** (unverified — requires browser check)
+
+## 2026-06-16 — Add Manage Reviewers feature
+
+- **What:** Full CRUD UI for reviewer personas. New files: `app/db.py` (SQLite at `data/tailorcv.db`), `app/personas.py` (preset + custom merge). Four new API routes (`GET/POST/PUT/DELETE /api/personas`). `agents.py` now loads personas dynamically per user. `index.html` gets a collapsible "Manage Reviewers" card: click any reviewer to view/edit, lock icon on presets, reset-to-default for presets, delete for custom, Add button for new ones.
+- **Why:** User requested ability to view, edit, add, and delete reviewers. Designed with paywall tiers in mind (free/paid limits enforced at API layer later).
+- **Verified:** Server boots clean; `GET /api/personas` returns all 4 presets correctly.
+
+## 2026-06-16 — Fix em-dash mojibake in review panel
+
+- **What:** Added `encoding="utf-8"` to `subprocess.run` in `app/agents.py:248`.
+- **Why:** On Windows, `text=True` without an explicit encoding uses the system default (cp1252). Claude's output contains UTF-8 em-dashes (`—`) which were decoded as `â€"` garbage.
+- **Verified:** (unverified — requires a live run through the tailor endpoint)
+
+## 2026-06-16 (later 3) — browser test passed; perf note
+
+- **Browser-tested claude-code mode end-to-end via the UI** (server on :8000,
+  `PROVIDER=claude-code`, fixed code `56ca56d`): real tailoring run completed,
+  `POST /api/tailor` → 200, Michael confirmed "looks good." Green banner, real
+  panel, downloads all working.
+- **Observed: claude-code mode is SLOW (~1–3 min/run), not the "~20–40s" the UI
+  shows.** Cause: each run spawns 5 separate `claude -p` processes (Node startup
+  + agent loop ×4 reviewers + synth). Not a bug — but the wait-text is misleading
+  and made it look hung. PENDING fix next session: (a) honest wait-text for
+  claude-code mode, and/or (b) default reviewers to Haiku in claude-code mode for
+  speed (Michael leaned (b), unconfirmed). See MEMORY "Open / next".
+- Background dev server stopped at end of session.
+
 ## 2026-06-16 (later 2) — code-review + security fixes on Pro/Max mode
 
 Review of `b32c346` (high-effort code review + security review) found 7 issues;
