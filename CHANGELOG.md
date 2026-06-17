@@ -2,6 +2,39 @@
 
 Newest entries on top. Each entry: what changed, why, and how it was verified.
 
+## 2026-06-16 (later 2) — code-review + security fixes on Pro/Max mode
+
+Review of `b32c346` (high-effort code review + security review) found 7 issues;
+fixed the blockers + hardening. Verified each below.
+
+- **CR-1 (CRITICAL) — `PROVIDER` in `.env` was silently ignored.** `agents.py`
+  read `PROVIDER` at *import* time, but `main.py` imported `agents` before
+  `load_dotenv()` ran — so a friend setting `PROVIDER=claude-code` in `.env`
+  (exactly what QUICKSTART says) got `api`/demo mode. Fixes: `using_claude_code()`
+  now reads `os.getenv` lazily; `reviewer_model()`/`synth_model()` made lazy too;
+  `main.py` moved `load_dotenv()` ABOVE the package imports. agents.py now has
+  **zero import-time env reads**. Verified: temp `.env` with `PROVIDER=claude-code`
+  → `using_claude_code()` True (was False); late-set `REVIEWER_MODEL` honored.
+- **CR-2 (MED) — stray `</content>`/`</invoke>` tags** at the end of
+  `QUICKSTART_FRIENDS.md` (leaked tool-call tags). Removed.
+- **S1 (MED, security) — `claude -p` ran with all tools enabled over untrusted
+  resume text.** Prompt-injection in a resume could induce tool use on the host
+  (matters once hosted). Added `--tools ""` to the subprocess argv (verified the
+  flag disables all tools and JSON still returns). Prompt was already piped via
+  stdin, not argv — no shell/command injection.
+- **S2 (LOW) — `claude` stderr was returned to the HTTP client** (path/info
+  disclosure). Now logged server-side; client gets a generic message.
+- **CR-3 (LOW) — Anthropic client rebuilt 5×/run** in api mode. `_client()` now
+  `@lru_cache`d by key (raises aren't cached; thread-safe enough for the pool).
+- **CR-4 (LOW) — bad `CLAUDE_CODE_TIMEOUT` crashed at import** via `int()`. Now
+  `_cc_timeout()` try/excepts → falls back to 180 with a warning. Verified
+  (`CLAUDE_CODE_TIMEOUT=180s` → warns, uses 180).
+- **S3 (INFO)** — silent api fallback spending the operator's key was a
+  consequence of CR-1; fixing CR-1 closes it. Long-term still gated by decision D.
+- **Verified:** `py_compile` OK; end-to-end claude-code run WITH `--tools ""`
+  (haiku) returned 4 scored reviewers (68/60/62/65) + full structured synth JSON;
+  independent subagent review pass found no regressions.
+
 ## 2026-06-16 (later)
 
 ### Added — Pro/Max local mode (PROVIDER switch: api | claude-code)

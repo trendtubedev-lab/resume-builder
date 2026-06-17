@@ -16,13 +16,17 @@ import uuid
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+# Load .env BEFORE importing our packages: agents/auth read env vars (PROVIDER,
+# REVIEWER_MODEL, ANTHROPIC_API_KEY, ...) at import time, so .env must be in
+# os.environ first or those values silently fall back to defaults.
+load_dotenv()
+
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Body
 from fastapi.responses import HTMLResponse, Response, JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import agents, auth, demo, export, parsing
-
-load_dotenv()
 
 log = logging.getLogger("tailorcv")
 

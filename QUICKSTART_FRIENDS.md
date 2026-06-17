@@ -96,5 +96,3 @@ paste a job description, and hit **Tailor my resume**.
   trial use is fine. Each tailoring run makes ~5 model calls.
 - This subscription mode is for **local, personal use** while we trial the app.
   The hosted version (later) will work differently.
-</content>
-</invoke>

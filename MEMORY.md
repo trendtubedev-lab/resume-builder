@@ -21,7 +21,8 @@ FastAPI backend + single-file HTML frontend (`app/static/index.html`). Upload 1�
 - Security hardening done & committed (`abe48a0`): SESSION_SECRET boot guard; Content-Disposition filename sanitization; chunked/capped upload read. `render.yaml` provisions `SESSION_SECRET` (`generateValue`) + Google creds.
 - Pushed to public repo `trendtubedev-lab/resume-builder` (branch `main`).
 - Storage is in-memory (`_STORE`, `auth.USER_KEYS`) — not persistent. Phase 2 = real datastore.
-- **Pro/Max local mode added & verified end-to-end (NOT yet committed/pushed):** `PROVIDER=claude-code` routes via local `claude -p`. Files: `app/agents.py` (provider layer + `preflight()`), `app/main.py` (boot preflight, demo/provider logic), `app/static/index.html` (key card hidden + green banner), `.env.example`, new `QUICKSTART_FRIENDS.md`. Plan = friends trial locally on own plans, then host (Phase 2).
+- **Pro/Max local mode** (`PROVIDER=claude-code` routes via local `claude -p`): committed+pushed in `b32c346`. Files: `app/agents.py` (provider layer + `preflight()`), `app/main.py`, `app/static/index.html`, `.env.example`, `QUICKSTART_FRIENDS.md`. Plan = friends trial locally on own plans, then host (Phase 2).
+- **Review fixes (UNCOMMITTED) on top of `b32c346`:** code+security review found CR-1 (CRITICAL: `.env` PROVIDER ignored due to import-time env read before `load_dotenv` → fixed: all agents.py env reads now lazy + `load_dotenv` moved above imports), plus `--tools ""` hardening (S1), stderr-leak fix (S2), client caching (CR-3), bad-timeout guard (CR-4), removed stray tags in QUICKSTART (CR-2). All verified incl. end-to-end. See CHANGELOG "later 2".
 
 ## Open / next
 - **Commit + push the Pro/Max mode** (CLAUDE.md `bd10bf5` already committed locally, not pushed).

@@ -25,17 +25,23 @@ import httpx
 
 log = logging.getLogger("tailorcv")
 
-REVIEWER_MODEL = os.getenv("REVIEWER_MODEL", "claude-sonnet-4-6")
-SYNTH_MODEL = os.getenv("SYNTH_MODEL", "claude-sonnet-4-6")
+DEFAULT_MODEL = "claude-sonnet-4-6"
+
+# Read lazily (not at import) so .env is honored regardless of load ordering.
+def reviewer_model() -> str:
+    return os.getenv("REVIEWER_MODEL", DEFAULT_MODEL)
+
+
+def synth_model() -> str:
+    return os.getenv("SYNTH_MODEL", DEFAULT_MODEL)
 
 # Where completions are routed:
 #   "api"         — Anthropic API, using a per-user or server ANTHROPIC_API_KEY (hosted default).
 #   "claude-code" — the user's LOCAL Claude Code CLI, on their own Pro/Max plan (no API key).
 # See QUICKSTART_FRIENDS.md for the local setup.
-PROVIDER = os.getenv("PROVIDER", "api").strip().lower()
-
-# Seconds to wait on a single local `claude -p` call before giving up.
-CC_TIMEOUT = int(os.getenv("CLAUDE_CODE_TIMEOUT", "180"))
+# PROVIDER and the timeout are read lazily (using_claude_code() / _cc_timeout())
+# so they honor .env no matter when it is loaded relative to this import.
+DEFAULT_CC_TIMEOUT = 180
 
 # Low temperature for consistent, calibrated output.
 REVIEWER_TEMPERATURE = 0.2
@@ -139,7 +145,10 @@ def _http_client() -> httpx.Client | None:
     return httpx.Client(**kwargs)
 
 
+@lru_cache(maxsize=8)
 def _client(api_key: str | None = None) -> anthropic.Anthropic:
+    # Cached by key so a single tailoring run (4 reviewers + 1 synth) reuses one
+    # client instead of constructing five. lru_cache does not cache the raises below.
     key = api_key or os.getenv("ANTHROPIC_API_KEY")
     if not key:
         raise RuntimeError(
@@ -156,7 +165,17 @@ def _client(api_key: str | None = None) -> anthropic.Anthropic:
 # raw response text (a JSON object as a string) for _parse_json to handle.
 
 def using_claude_code() -> bool:
-    return PROVIDER in {"claude-code", "claude_code", "cc"}
+    return os.getenv("PROVIDER", "api").strip().lower() in {"claude-code", "claude_code", "cc"}
+
+
+def _cc_timeout() -> int:
+    """CLAUDE_CODE_TIMEOUT as an int, tolerant of a bad value (no boot crash)."""
+    raw = os.getenv("CLAUDE_CODE_TIMEOUT", str(DEFAULT_CC_TIMEOUT))
+    try:
+        return int(raw)
+    except ValueError:
+        log.warning("CLAUDE_CODE_TIMEOUT=%r is not an integer; using %ds.", raw, DEFAULT_CC_TIMEOUT)
+        return DEFAULT_CC_TIMEOUT
 
 
 @lru_cache(maxsize=1)
@@ -224,22 +243,28 @@ def _claude_code_complete(system: str, user: str, model: str) -> str:
         f"{system}\n\n{user}\n\n"
         "Respond with ONLY the JSON object — no markdown fences, no preamble."
     )
+    timeout = _cc_timeout()
     try:
         proc = subprocess.run(
-            [exe, "-p", "--output-format", "json", "--model", model],
+            # --tools "" disables ALL tools: the resume/job text is untrusted, so the
+            # model must only emit text and can never be induced (prompt injection) to
+            # run a tool on the host. Prompt is piped via stdin, never as an argv.
+            [exe, "-p", "--output-format", "json", "--model", model, "--tools", ""],
             input=prompt,
             capture_output=True,
             text=True,
-            timeout=CC_TIMEOUT,
+            timeout=timeout,
             cwd=tempfile.gettempdir(),
         )
     except subprocess.TimeoutExpired as e:
-        raise RuntimeError(f"Claude Code timed out after {CC_TIMEOUT}s.") from e
+        raise RuntimeError(f"Claude Code timed out after {timeout}s.") from e
     if proc.returncode != 0:
-        tail = (proc.stderr or proc.stdout or "").strip()[-400:]
+        # Log the detail server-side; don't leak local paths/stderr to the client.
+        log.error("claude exited %s: %s", proc.returncode,
+                  (proc.stderr or proc.stdout or "").strip()[-1000:])
         raise RuntimeError(
-            "Claude Code call failed. Are you signed in? Run `claude` once to log in. "
-            f"(exit {proc.returncode}) {tail}"
+            "Claude Code call failed. Are you signed in? Run `claude` once to log in "
+            "(see QUICKSTART_FRIENDS.md)."
         )
     try:
         payload = json.loads(proc.stdout)
@@ -278,7 +303,7 @@ Output a JSON object of exactly this shape (no other text):
   "gaps": [<up to 5 short strings: missing skills, keywords, or evidence>],
   "suggestions": [<up to 6 short, actionable rewrite suggestions>]
 }}"""
-    raw = complete(REVIEWER_SYSTEM, prompt, REVIEWER_MODEL, 2000,
+    raw = complete(REVIEWER_SYSTEM, prompt, reviewer_model(), 2000,
                    REVIEWER_TEMPERATURE, api_key)
     data = _parse_json(raw)
     data["persona"] = persona.name
@@ -363,7 +388,7 @@ Output a JSON object of exactly this shape (no other text):
   ],
   "change_summary": [<3-6 short strings describing the key tailoring changes you made>]
 }}"""
-    raw = complete(SYNTH_SYSTEM, prompt, SYNTH_MODEL, 8000, SYNTH_TEMPERATURE, api_key)
+    raw = complete(SYNTH_SYSTEM, prompt, synth_model(), 8000, SYNTH_TEMPERATURE, api_key)
     return _parse_json(raw)
 
 
