@@ -11,6 +11,8 @@ Safety / ask-first > accuracy > verification > everything else.
 ## SESSION START — MANDATORY PREFLIGHT (do this BEFORE any work, every time)
 These exist because real failures happened. Run them, show the output, do not skip.
 
+0. **Load state before working.** Read `MEMORY.md`, `DECISIONS.md`, and the last ~5 entries of `CHANGELOG.md` to understand where things stand. Note any `[UNVERIFIED]` items. Then confirm the goal for the session before starting non-trivial work.
+
 1. **Confirm you are in the RIGHT folder.** The real repo is `C:\Users\mayne\CLAUDE-workspace\resume builder`. Before editing anything:
    - Run `pwd` (or check the path of the file you're about to touch) AND `git rev-parse --show-toplevel`.
    - Print the resolved path and compare it to the repo path above and to the path shown in my shell prompt.
@@ -28,16 +30,27 @@ These exist because real failures happened. Run them, show the output, do not sk
 
 ---
 
+## AFTER EVERY CHANGE — MANDATORY (log it + remember it)
+Do this as you go, not in a batch at the end.
+
+1. **CHANGELOG.** After any code/config/rule change, prepend a dated entry to `CHANGELOG.md` (newest on top): what changed, why, and how it was verified. If `CHANGELOG.md` doesn't exist, create it.
+2. **Memory.** At the end of meaningful work — and BEFORE any compaction — update the memory so the next cold-start session inherits it: add/update the relevant memory file and its `MEMORY.md` index line. If the memory store is read-only or unreachable that session, SAY SO and record the same notes in `CHANGELOG.md` as the fallback (never silently skip).
+3. **Reconcile before finishing.** If you changed how things work, make sure `CLAUDE.md`, `CHANGELOG.md`, and memory don't contradict each other.
+
+---
+
 ## Rules
-- **Interview me before non-trivial work.** If a request is ambiguous, ask about goal, scope, and what "done" looks like first. Restate your understanding, then proceed.
+- **Interview me before non-trivial work.** If a request is ambiguous, ask about goal, scope, and what "done" looks like first. Batch clarifying questions into one round. Restate your understanding, then proceed.
 - **Spec before building.** Short spec first (what it does, who it's for, who it's not for, success criteria, out of scope). Don't build until I approve.
 - **Ask before anything destructive, irreversible, or that costs money** — deleting/overwriting files, force-push, `git reset --hard`, DB migrations, installing/upgrading deps, paid API calls, deploys, sending messages, creating/pushing repos. State exactly what you'll do and wait for an explicit "yes."
+- **Launching agents / subagents.** Do NOT launch subagents (Agent/Task tool) unless I explicitly ask — they start cold, re-derive context, and burn tokens; handle multi-step or "thorough" work inline with your own tools. Exception: you may *propose* a subagent for independent verification/review of high-stakes changes (security, destructive ops, deploys) — state why and wait for my "yes" before spawning. When I do ask you to spawn one, pass the needed context explicitly (it inherits nothing), keep it scoped to one task, and relay only what matters back.
 - Verify with a check you can actually run and **show the output as evidence**. If no check is possible, say so. Never simulate or invent results.
 - If you get stuck (same fix fails twice, no progress), STOP and ask. No retry loops.
-- Never put secrets (API keys, tokens, passwords, `.env` contents) in this file, committed files, or chat. If one is about to be committed, stop and warn me.
+- **Secrets:** live in `.env` only — never hardcode defaults, and never print, commit, or copy them (not in this file, committed files, or chat). If one is about to be committed, stop and warn me.
 
 ## Preferences
 - **Accuracy first.** Never fabricate. Distinguish verified from inferred; tag unverified specifics (paths, flags, versions). Don't present guesses as fact.
+- Label example/demo/fake output as `[EXAMPLE — not real data]`; never present demo-mode output as real.
 - Teaching mode: when something could be done better, say so and explain why. When you fix something, tell me what was wrong and why it happened.
 - Prefer the simplest thing that works; call out over-engineering.
 - Be concise. Lead with the answer, then reasoning. No filler, no groveling.
