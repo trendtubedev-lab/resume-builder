@@ -8,7 +8,5 @@ Locked choices and open questions. Don't re-litigate LOCKED items without flaggi
 - 2026-06-16 — Public GitHub repo `trendtubedev-lab/resume-builder`, branch `main`.
 - Models default to `claude-sonnet-4-6` (`REVIEWER_MODEL` / `SYNTH_MODEL`, overridable via env).
 - Per-user Anthropic keys stored in memory only — not on disk, not in the session cookie.
-
-## Open
-- **D — Monetization / key model:** bring-your-own-key vs. you-provide-key-and-charge. Undecided. Blocks billing, rate limiting, and whether to keep the server-wide `ANTHROPIC_API_KEY` fallback in `auth.user_api_key()`.
-- **Phase 2 persistence:** which datastore replaces in-memory `_STORE` / `USER_KEYS` (e.g. Redis vs. SQL DB).
+- 2026-06-17 — **D RESOLVED — Monetization / key model:** **free/cheap tier = bring-your-own** (user supplies their own Anthropic key via `api` mode, or runs on their own Claude plan via `claude-code` mode — we pay nothing). **Paid tier = we host** on our own infrastructure with our key, eating the API cost; that's the paid offering. The free/BYO tier is this codebase; the paid/hosted tier is a future, separate build. → No `member`/tier concept belongs in this repo yet; it ships with the paid-hosting build.
+- 2026-06-17 — **Phase 2 persistence:** **SQLite** (`data/tailorcv.db` via `app/db.py`), not Redis. Generated results persisted in a `results` table; **API keys stay in memory** (secrets never on disk). No TTL / tiers (keep forever) — revisit pruning + free-vs-member retention when the paid tier is built. Postgres swap is a contained `db.py` change if a high-write hosted tier needs it.

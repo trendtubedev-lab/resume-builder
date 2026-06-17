@@ -2,6 +2,58 @@
 
 Newest entries on top. Each entry: what changed, why, and how it was verified.
 
+## 2026-06-17 — AI-firstify audit follow-ups (top-5 recs)
+
+Ran the `ai-firstify` skill (audit mode) on the project, then actioned its
+top-5 recommendations. No destructive changes; all additive.
+
+- **What:**
+  - **Git safety check (rec #2):** confirmed nothing sensitive is tracked —
+    `.env`, `data/`, `tailorcv.db` all properly ignored; `data/` never committed
+    historically. No leak, no history scrub needed. (investigation only)
+  - **`.gitignore` hardening (rec #4):** added `.env.*` (+ `!.env.example`),
+    `*.pem`, `*.key`, `credentials*`, `secrets*`. Verified `.env.example` still
+    tracked and `.env.local` now ignored via `git check-ignore`.
+  - **Export validation gate (rec #3):** new `scripts/export_check.py` — offline
+    (no API key) self-test that renders `build_docx`/`build_pdf` from a sample
+    resume dict and asserts non-empty output with correct magic headers (`PK..`
+    for docx, `%PDF` for pdf). Wired into `scripts/live_test.py` to run first,
+    before the API gate. ASCII-only output (Windows cp1252 console safe).
+  - **`release-check` skill (rec #1):** new `.claude/skills/release-check/SKILL.md`
+    codifying the session-close ritual (export check → live panel → secret sweep
+    → CHANGELOG → memory → doc reconcile → commit) as prescriptive steps.
+  - **README cost/model docs (rec #5):** added `PROVIDER` to the config table and
+    rewrote the Cost note to cover API mode (pricing/console links) vs. free local
+    `claude-code` mode vs. demo mode. Removed the unverified "a few cents" figure.
+- **Why:** align with AI-first principles surfaced by the audit — safety
+  defense-in-depth, validate the artifact users actually receive, capture the
+  repeated session-close workflow as a skill, and document the $0 local path.
+- **Verified:** `python scripts/export_check.py` → `[OK] docx: 35,733 bytes` /
+  `[OK] pdf: 2,323 bytes` / `ALL EXPORTS OK` (exit 0). `git check-ignore` confirms
+  `.env.example` un-ignored, `.env.local` ignored. Git tracking sweep clean.
+
+## 2026-06-17 — Phase 2: persist tailored results to SQLite
+
+- **What:** Generated resumes now survive a server restart. Replaced the
+  in-memory `_STORE` dict in `app/main.py` with a `results` table in the
+  existing SQLite DB (`data/tailorcv.db`).
+  - **db.py:** new `results` table (`job_id PK, owner, resume_json, created_at`)
+    in `init_db()`, plus `save_result(job_id, owner, resume)` (JSON-serializes
+    the resume dict) and `get_result(job_id) -> {'resume', 'owner'} | None`.
+  - **main.py:** removed `_STORE`; `/api/tailor` calls `db.save_result(...)`,
+    `/api/download` reads `db.get_result(...)`. Ownership check unchanged. The
+    "Result expired" copy is now "Result not found" (results no longer expire).
+- **Scope decisions (see DECISIONS.md):** API keys deliberately stay in memory
+  (safest — no secrets at rest; `api`-mode users re-enter after restart,
+  `claude-code` needs none). No TTL / no free-vs-member tiers — that ships with
+  the future paid/hosted tier, not this codebase. SQLite chosen over Redis;
+  Postgres swap later is a contained `db.py` change since nothing else touches SQL.
+- **Decision D resolved:** free/cheap = bring-your-own-key (or own Claude plan);
+  paid = we host on our own infra with our key. Logged in DECISIONS.md.
+- **Verified (local, .venv):** `py_compile app/db.py app/main.py` OK; save →
+  fresh connection read (simulates restart) round-trips the dict + owner;
+  missing job_id → None. Test row deleted from the DB afterward.
+
 ## 2026-06-17 — Harden untrusted PDF/DOCX parsing (item C)
 
 - **What:** Made `app/parsing.py` safe against hostile/malformed uploads, and

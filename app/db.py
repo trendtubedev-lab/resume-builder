@@ -5,7 +5,9 @@ the app is single-process so no connection pooling is needed.
 """
 from __future__ import annotations
 
+import json
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 
 _DB_PATH = Path(__file__).parent.parent / "data" / "tailorcv.db"
@@ -33,6 +35,40 @@ def init_db() -> None:
                 PRIMARY KEY (key, user_email)
             )
         """)
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS results (
+                job_id      TEXT PRIMARY KEY,
+                owner       TEXT NOT NULL,
+                resume_json TEXT NOT NULL,
+                created_at  TEXT NOT NULL
+            )
+        """)
+
+
+# ---------------------------------------------------------------------------
+# tailored results (replaces the old in-memory _STORE)
+# ---------------------------------------------------------------------------
+
+def save_result(job_id: str, owner: str, resume: dict) -> None:
+    """Persist a generated resume. resume is JSON-serialized into one column."""
+    with _connect() as con:
+        con.execute(
+            "INSERT OR REPLACE INTO results (job_id, owner, resume_json, created_at) "
+            "VALUES (?, ?, ?, ?)",
+            (job_id, owner, json.dumps(resume), datetime.now(timezone.utc).isoformat()),
+        )
+
+
+def get_result(job_id: str) -> dict | None:
+    """Return {'resume': dict, 'owner': str} for a job, or None if absent."""
+    with _connect() as con:
+        row = con.execute(
+            "SELECT owner, resume_json FROM results WHERE job_id = ?",
+            (job_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    return {"resume": json.loads(row["resume_json"]), "owner": row["owner"]}
 
 
 # ---------------------------------------------------------------------------

@@ -86,10 +86,6 @@ agents.preflight()
 # Ensure DB tables exist.
 db.init_db()
 
-# In-memory store of generated resumes, keyed by job id.
-# For a hosted multi-user service, swap this for Redis or a DB (see README).
-_STORE: dict[str, dict] = {}
-
 FRONTEND = Path(__file__).parent / "static" / "index.html"
 SAMPLES_DIR = Path(__file__).parent / "samples"
 MAX_FILES = 3
@@ -278,7 +274,7 @@ async def tailor(
         raise HTTPException(502, f"Generation failed: {e}.")
 
     job_id = uuid.uuid4().hex[:12]
-    _STORE[job_id] = {"resume": resume, "owner": user["email"]}
+    db.save_result(job_id, user["email"], resume)
 
     return JSONResponse(
         {
@@ -295,9 +291,9 @@ async def tailor(
 @app.get("/api/download/{job_id}")
 def download(request: Request, job_id: str, format: str = "pdf"):
     user = auth.require_user(request)
-    item = _STORE.get(job_id)
+    item = db.get_result(job_id)
     if not item or item.get("owner") != user["email"]:
-        raise HTTPException(404, "Result expired or not found. Generate again.")
+        raise HTTPException(404, "Result not found. Generate again.")
     resume = item["resume"]
     name = _safe_filename(resume.get("name"))
     if format == "docx":

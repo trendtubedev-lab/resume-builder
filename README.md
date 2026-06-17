@@ -80,9 +80,11 @@ All hosting config comes from environment variables — nothing in the code
 changes between local and production.
 
 ### Before charging real users (productionization checklist)
-The MVP keeps generated resumes **in memory** (`_STORE` in `app/main.py`), which
-is fine for one machine but not for a scaled service. To productionize:
-- Swap `_STORE` for Redis or a database (results currently live until restart).
+Generated resumes are **persisted to SQLite** (`data/tailorcv.db`, via `app/db.py`),
+so they survive a restart. Per-user Anthropic keys are still kept **in memory only**
+(by design — secrets never hit disk). To productionize further:
+- For a multi-instance / high-write deployment, swap SQLite for Postgres (the app
+  only talks to `app/db.py`, so it's a contained change).
 - Add auth + per-user API usage metering / billing (e.g. Stripe).
 - Add rate limiting and request size caps (basic 5 MB/file, 3-file caps exist).
 - Consider a job queue for the API calls if traffic is high.
@@ -121,7 +123,8 @@ SDK's default client, so normal deployments are unaffected.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | — | **Required.** Your Claude API key. |
+| `ANTHROPIC_API_KEY` | — | **Required for API mode.** Your Claude API key. |
+| `PROVIDER` | `api` | `api` uses the Anthropic API (per-call billing). `claude-code` routes through your local Claude Code CLI on your own Pro/Max plan — no API key, no per-run charge. |
 | `REVIEWER_MODEL` | `claude-sonnet-4-6` | Model for the review panel. |
 | `SYNTH_MODEL` | `claude-sonnet-4-6` | Model for the final rewrite. |
 | `PORT` | `8000` | Port to serve on (most hosts set this automatically). |
@@ -162,6 +165,17 @@ It prints each reviewer's score and the tailored result, and runs a
 appear in the original resume. Use it after changing prompts or models.
 
 ## Cost note
-Each tailoring run makes 4 reviewer calls + 1 synthesis call (5 API calls).
-With Sonnet that's typically a few cents per run; switch models in `.env` to
-trade cost vs. quality.
+Each tailoring run makes 5 model calls: 4 reviewers in parallel plus 1
+synthesis. Two ways to pay for them:
+
+- **API mode** (`PROVIDER=api`, the default): billed per call against your
+  Anthropic key. The cost depends on `REVIEWER_MODEL` / `SYNTH_MODEL` and your
+  resume/JD length — check current rates at
+  https://www.anthropic.com/pricing and watch usage at
+  https://console.anthropic.com. Default models are Sonnet; switch to Haiku in
+  `.env` for cheaper runs, or to a larger model for quality-critical output.
+- **Local mode** (`PROVIDER=claude-code`): routes the same 5 calls through your
+  local Claude Code CLI on your existing Pro/Max plan. No API key and no
+  per-run charge — best when you (or a friend with a plan) run it on your own
+  machine. Demo mode (no key, no plan) stays free but produces only the offline
+  preview, not the full rewrite.

@@ -106,6 +106,14 @@ def run(sample_id: str):
 
 
 def main():
+    # Exporters are validated first — they need no API key and are the part
+    # users actually receive, so a broken renderer should fail fast.
+    from scripts.export_check import check as export_check
+    print("Export self-test (offline):")
+    if not export_check():
+        print("\n❌ Export check failed — fix exporters before the API panel.")
+        sys.exit(2)
+
     if not (os.getenv("ANTHROPIC_API_KEY")):
         print("No ANTHROPIC_API_KEY found. Add it to .env or export it, then re-run.")
         sys.exit(1)
