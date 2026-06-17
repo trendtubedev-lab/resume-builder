@@ -2,6 +2,31 @@
 
 Newest entries on top. Each entry: what changed, why, and how it was verified.
 
+## 2026-06-17 — Extended reviewer panel: 11 new personas + per-run selector UI
+
+- **What:**
+  - `app/personas.py`: added 11 new PRESET_PERSONAS (all `default_enabled=False`, opt-in):
+    Engineering Bar-Raiser, Leveling Calibrator, Career Narrative Strategist,
+    Transferable Skills Interpreter, Attention & Perception Specialist,
+    Domain Credentialing Auditor, Industry Format & Culture Fit Auditor,
+    Competitive Field Analyst, Executive Presence Assessor,
+    Commitment Signal Analyst, First-Impression Clarity Analyst.
+    Added `default_enabled` field to Persona dataclass.
+  - `app/agents.py`: added `selected_keys` param to `run_panel()` — filters to
+    only chosen personas; falls back to default-enabled presets if empty.
+  - `app/main.py`: `/api/tailor` accepts `selected_personas` form list and passes
+    to `run_panel`; `/api/personas` exposes `default_enabled` field.
+  - `app/static/index.html`: inline persona selector grid in the form — all 15
+    shown as toggleable chips (original 4 pre-checked), selected keys sent with
+    every tailor request.
+- **Why:** Michael asked for a larger reviewer pool with user-selectable personas
+  on one page.
+- **Verified:** `python -c "from app.personas import PRESET_PERSONAS..."` shows
+  15 total (4 ON, 11 off). Server starts; `GET /api/personas` returns all 15 with
+  correct `default_enabled` flags. UI renders selector grid at http://localhost:8000.
+- **Files touched:** `app/personas.py`, `app/agents.py`, `app/main.py`,
+  `app/static/index.html`
+
 ## 2026-06-17 — README: surface PROVIDER=claude-code in setup section
 
 - **What:** Added a callout in the "Run it locally" step where users edit `.env`.

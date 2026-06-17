@@ -215,6 +215,7 @@ async def tailor(
     request: Request,
     job_description: str = Form(...),
     tone: str = Form("professional"),
+    selected_personas: list[str] = Form(default=[]),
     files: list[UploadFile] = File(...),
 ):
     user = auth.require_user(request)
@@ -266,7 +267,9 @@ async def tailor(
             panel = demo.demo_panel(resume_text, job_description)
             resume = demo.demo_synthesize(resume_text, job_description, tone)
         else:
-            panel = agents.run_panel(resume_text, job_description, api_key=key, user_email=user["email"])
+            panel = agents.run_panel(resume_text, job_description, api_key=key,
+                                   user_email=user["email"],
+                                   selected_keys=selected_personas or None)
             resume = agents.synthesize(resume_text, job_description, panel, tone, api_key=key)
     except RuntimeError as e:
         raise HTTPException(503, str(e))
@@ -316,7 +319,8 @@ def list_personas(request: Request) -> dict:
     user = auth.require_user(request)
     ps = personas.get_personas(user["email"])
     return {"personas": [
-        {"key": p.key, "name": p.name, "brief": p.brief, "is_preset": p.is_preset}
+        {"key": p.key, "name": p.name, "brief": p.brief,
+         "is_preset": p.is_preset, "default_enabled": p.default_enabled}
         for p in ps
     ]}
 

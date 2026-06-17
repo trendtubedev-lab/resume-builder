@@ -289,9 +289,22 @@ Output a JSON object of exactly this shape (no other text):
 
 
 def run_panel(resume_text: str, job: str, api_key: str | None = None,
-              user_email: str = "local@localhost") -> list[dict]:
-    """Run all reviewer personas in parallel. Returns a list of critiques."""
+              user_email: str = "local@localhost",
+              selected_keys: list[str] | None = None) -> list[dict]:
+    """Run reviewer personas in parallel. Returns a list of critiques.
+
+    selected_keys: if provided, only run personas whose key is in the list.
+    If None or empty, falls back to the default-enabled presets.
+    """
     panel_personas = _load_personas(user_email)
+    if selected_keys:
+        key_set = set(selected_keys)
+        panel_personas = [p for p in panel_personas if p.key in key_set]
+    if not panel_personas:
+        # Nothing selected or nothing matched — fall back to default-enabled.
+        from app.personas import PRESET_PERSONAS
+        default_keys = {p.key for p in PRESET_PERSONAS if p.default_enabled}
+        panel_personas = [p for p in _load_personas(user_email) if p.key in default_keys]
     results: list[dict] = []
     with ThreadPoolExecutor(max_workers=len(panel_personas)) as ex:
         futures = {

@@ -49,6 +49,14 @@
   .reviewer ul { margin: 6px 0 0 18px; padding: 0; font-size: 13px; }
   .reviewer .g { color: var(--warn); }
   .tag { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-top: 8px; display:block; }
+  /* Persona selector */
+  .persona-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; margin-top: 8px; }
+  .persona-chip { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; cursor: pointer; user-select: none; transition: border-color .15s, background .15s; }
+  .persona-chip:hover { border-color: var(--accent); }
+  .persona-chip.pc-on { border-color: var(--accent); background: #f0f4ff; }
+  .pc-name { font-size: 13px; font-weight: 600; }
+  .pc-brief { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .pc-count { font-size: 12px; color: var(--muted); margin-top: 6px; }
   .toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
   .toggle button { border: none; background: #fff; padding: 10px 22px; cursor: pointer; font-weight: 600; color: var(--muted); }
   .toggle button.active { background: var(--accent); color: #fff; }
@@ -384,6 +392,13 @@
     </div></div>
 
     <div style="height:18px"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px;">
+      <label style="margin:0;">Reviewers <span class="hint">— click to toggle on/off</span></label>
+      <span class="pc-count" id="pc-count"></span>
+    </div>
+    <div class="persona-grid" id="persona-grid"></div>
+
+    <div style="height:18px"></div>
     <button class="primary" id="go">Tailor my resume</button>
     <div id="status"></div>
   </div>
@@ -413,6 +428,7 @@
 <script>
 const $ = (id) => document.getElementById(id);
 let selectedFiles = [], jobId = null, fmt = "pdf", me = null;
+let allPersonas = [], selectedPersonaKeys = new Set();
 
 async function loadMe(){ me = await (await fetch("/api/me")).json(); return me; }
 
@@ -439,6 +455,7 @@ function showApp(){
     const sel = $("sample");
     (s.samples||[]).forEach(x=>{ const o=document.createElement("option"); o.value=x.id; o.textContent="⚡ "+x.label; sel.appendChild(o); });
   });
+  loadPersonas();
 }
 
 function renderKeyState(){
@@ -507,6 +524,7 @@ $("go").onclick = async () => {
   setStatus(`<span class="spinner"></span> ${wait}`);
   const fd=new FormData();
   fd.append("job_description",job); fd.append("tone",$("tone").value);
+  selectedPersonaKeys.forEach(k=>fd.append("selected_personas",k));
   selectedFiles.forEach(f=>fd.append("files",f));
   try{
     const res=await fetch("/api/tailor",{method:"POST",body:fd});
@@ -566,14 +584,20 @@ $("rv-toggle").onclick = () => {
   $("rv-toggle").textContent = isOpen ? "⚙ Manage reviewers ▾" : "⚙ Manage reviewers ▸";
   $("rv-toggle").setAttribute("aria-expanded", String(isOpen));
   $("rv-card").classList.toggle("open", isOpen);
-  if (isOpen && rvPersonas.length === 0) loadReviewers();
+  if (isOpen && rvPersonas.length === 0) loadPersonas();
 };
 
-async function loadReviewers() {
+async function loadPersonas() {
   try {
     const d = await (await fetch("/api/personas")).json();
-    rvPersonas = d.personas || [];
-    rvPersonas.forEach(p => { if (p.is_preset && !PRESET_DEFAULTS[p.key]) PRESET_DEFAULTS[p.key] = {name: p.name, brief: p.brief}; });
+    allPersonas = d.personas || [];
+    rvPersonas = allPersonas;
+    allPersonas.forEach(p => { if (p.is_preset && !PRESET_DEFAULTS[p.key]) PRESET_DEFAULTS[p.key] = {name: p.name, brief: p.brief}; });
+    // Default selection: personas with default_enabled=true
+    if (selectedPersonaKeys.size === 0) {
+      allPersonas.forEach(p => { if (p.default_enabled) selectedPersonaKeys.add(p.key); });
+    }
+    renderPersonaSelector();
     renderRvList();
     if (rvSelected) {
       const still = rvPersonas.find(p => p.key === rvSelected.key);
@@ -581,6 +605,34 @@ async function loadReviewers() {
     }
   } catch(e) { rvMsg("Could not load reviewers.", true); }
 }
+
+function renderPersonaSelector() {
+  const grid = $("persona-grid");
+  if (!grid) return;
+  grid.innerHTML = allPersonas.map(p => `
+    <div class="persona-chip${selectedPersonaKeys.has(p.key) ? ' pc-on' : ''}" data-key="${esc(p.key)}" title="${esc(p.brief)}">
+      <div class="pc-name">${esc(p.name)}</div>
+      <div class="pc-brief">${esc(p.brief)}</div>
+    </div>`).join("");
+  document.querySelectorAll(".persona-chip").forEach(chip => {
+    chip.onclick = () => {
+      const k = chip.dataset.key;
+      if (selectedPersonaKeys.has(k)) selectedPersonaKeys.delete(k);
+      else selectedPersonaKeys.add(k);
+      chip.classList.toggle("pc-on", selectedPersonaKeys.has(k));
+      updatePcCount();
+    };
+  });
+  updatePcCount();
+}
+
+function updatePcCount() {
+  const n = selectedPersonaKeys.size;
+  const el = $("pc-count");
+  if (el) el.textContent = n === 0 ? "None selected (will use defaults)" : `${n} reviewer${n===1?'':'s'} selected`;
+}
+
+async function loadReviewers() { return loadPersonas(); }
 
 function renderRvList() {
   $("rv-list").innerHTML = rvPersonas.map(p => `
