@@ -29,8 +29,15 @@ You need **Python 3.10+**.
    ```
    cp .env.example .env        # then edit .env (see below)
    ```
-   For the simplest local run, set `AUTH_DISABLED=1` and a `SESSION_SECRET`.
-   Your friend can then paste their Anthropic key right in the app.
+   At minimum, set `AUTH_DISABLED=1` and a `SESSION_SECRET`.
+
+   **No API key? Use your Claude Pro/Max plan instead.**
+   Set `PROVIDER=claude-code` in `.env` and TailorCV routes calls through your
+   local Claude Code CLI — no Anthropic API key, no per-run charge.
+   See [QUICKSTART_FRIENDS.md](QUICKSTART_FRIENDS.md) for the full setup (takes ~10 min).
+
+   If you do have an API key, leave `PROVIDER=api` (the default) and your friend
+   pastes their key in the app.
 2. Start it:
    - **macOS/Linux:** double-click `start.command` (or run `./start.command`)
    - **Windows:** double-click `start.bat`

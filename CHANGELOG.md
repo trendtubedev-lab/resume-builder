@@ -2,6 +2,17 @@
 
 Newest entries on top. Each entry: what changed, why, and how it was verified.
 
+## 2026-06-17 — README: surface PROVIDER=claude-code in setup section
+
+- **What:** Added a callout in the "Run it locally" step where users edit `.env`.
+  Previously `PROVIDER` was only mentioned in the config table at the bottom;
+  someone following the setup steps would default to API mode without knowing
+  the no-cost local option existed.
+- **Why:** Anyone with a Claude Pro/Max plan should know they can set
+  `PROVIDER=claude-code` before they reach for an API key.
+- **Verified:** Read the updated file; wording is clear and links to QUICKSTART_FRIENDS.md.
+- **Files touched:** `README.md`
+
 ## 2026-06-17 — Synthesizer company-name fix + UTF-8 stdout fix + PROVIDER fix
 
 - **What:**
