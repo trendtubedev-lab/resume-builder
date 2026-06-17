@@ -8,6 +8,7 @@ Set AUTH_DISABLED=1 to bypass Google for local development.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -95,6 +96,14 @@ MAX_FILES = 3
 MAX_BYTES = 5 * 1024 * 1024  # 5 MB per file
 MAX_TOTAL_BYTES = 12 * 1024 * 1024  # 12 MB across all files in one request
 CHUNK_SIZE = 64 * 1024
+# Hard wall-clock cap on parsing one file. Parsing is CPU-bound and a crafted
+# PDF/DOCX could spin forever; we run it off the event loop and time it out.
+try:
+    PARSE_TIMEOUT = float(os.getenv("PARSE_TIMEOUT_SECONDS", "15"))
+    if PARSE_TIMEOUT <= 0:
+        PARSE_TIMEOUT = 15.0
+except ValueError:
+    PARSE_TIMEOUT = 15.0
 
 
 def _safe_filename(name: str | None) -> str:
@@ -230,7 +239,20 @@ async def tailor(
                 400, f"Uploads are too large in total (max {MAX_TOTAL_BYTES // (1024 * 1024)} MB)."
             )
         try:
-            text = parsing.extract_text(f.filename, data)
+            # Off the event loop + timed out: a hostile file can't hang or
+            # block the server. to_thread can't be cancelled, but wait_for
+            # frees the request and the orphaned thread dies with the parse.
+            text = await asyncio.wait_for(
+                asyncio.to_thread(parsing.extract_text, f.filename, data),
+                timeout=PARSE_TIMEOUT,
+            )
+        except asyncio.TimeoutError:
+            log.warning("Parsing %r exceeded %ss timeout", f.filename, PARSE_TIMEOUT)
+            raise HTTPException(
+                400,
+                f"'{f.filename}' took too long to read and may be malformed. "
+                "Try re-exporting it or uploading a TXT version.",
+            )
         except ValueError as e:
             raise HTTPException(400, str(e))
         chunks.append(f"--- {f.filename} ---\n{text}")

@@ -26,9 +26,8 @@ FastAPI backend + single-file HTML frontend (`app/static/index.html`). Upload 1�
 - **Browser-tested in claude-code mode (2026-06-16): WORKS — Michael ran a real tailoring via the UI, "looks good."** Green banner + real panel + downloads confirmed. He's continuing in Claude Desktop next session and has an IMAGE to show.
 
 ## Open / next
-- **PERF / UX (next session): claude-code mode is slow** — each run spawns 5 separate `claude -p` processes (4 reviewers + synth), so ~1–3 min, NOT the "~20–40s" the UI promises. Two pending fixes Michael was choosing between: (a) just fix the misleading wait-text in `index.html` for claude-code mode; (b) ALSO default reviewers to Haiku in claude-code mode for speed (synth stays higher quality). Michael leaned toward (b) but hadn't confirmed when he left. NOT yet done.
-- **Michael has an IMAGE to show** re: the result (bring it up first thing in desktop).
-- C: harden untrusted PDF/DOCX parsing (low priority).
+- claude-code mode speed: Michael says it's no longer slow (2026-06-17). Perf item closed; no wait-text/Haiku change made.
+- **C DONE (2026-06-17): untrusted PDF/DOCX parsing hardened.** `parsing.py` (zip-bomb guard, text cap, broad error→generic ValueError) + `main.py` (parse off-loop via `asyncio.to_thread` with `PARSE_TIMEOUT`, default 15s). Env knobs: `PARSE_TIMEOUT_SECONDS`, `MAX_DOCX_UNCOMPRESSED_MB`, `MAX_DOCX_ZIP_RATIO`, `MAX_RESUME_CHARS`. Verified locally; not yet committed.
 - D: bring-your-own-key vs. you-pay — OPEN (see `DECISIONS.md`); claude-code mode adds a 3rd lane (run-on-your-own-plan) for the local trial but doesn't resolve the hosted-billing question.
 - Live API validation must run locally (`python scripts/live_test.py`); the Cowork sandbox blocks `api.anthropic.com`. (claude-code mode worked from here — `claude` CLI present + signed in on this machine.)
 

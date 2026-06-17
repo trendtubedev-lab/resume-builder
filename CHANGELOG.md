@@ -2,6 +2,32 @@
 
 Newest entries on top. Each entry: what changed, why, and how it was verified.
 
+## 2026-06-17 — Harden untrusted PDF/DOCX parsing (item C)
+
+- **What:** Made `app/parsing.py` safe against hostile/malformed uploads, and
+  changed `app/main.py` to parse off the event loop with a timeout.
+  - **Timeout + offload (main.py):** `parsing.extract_text` now runs via
+    `asyncio.wait_for(asyncio.to_thread(...), PARSE_TIMEOUT)` (default 15s, env
+    `PARSE_TIMEOUT_SECONDS`). A crafted file that hangs pypdf/python-docx can no
+    longer block the event loop or freeze the server → returns 400.
+  - **DOCX zip-bomb guard:** `_check_docx_bomb` inspects the zip directory
+    before python-docx decompresses; rejects if uncompressed total >50 MB
+    (`MAX_DOCX_UNCOMPRESSED_MB`) or compression ratio >100× (`MAX_DOCX_ZIP_RATIO`).
+  - **Extracted-text cap:** per-file text truncated to 200k chars
+    (`MAX_RESUME_CHARS`); PDF loop stops early once the cap is hit.
+  - **Broadened error handling:** `_guard` wraps each parser; any unexpected
+    exception → generic user-facing ValueError (→400), real details logged
+    server-side only (no stack-trace/info leak, matching the S2 fix pattern).
+  - **XXE/billion-laughs:** verified python-docx's lxml parser does NOT expand
+    DTD entities (`&a;` → None), so entity-expansion attacks are already blunted
+    at the parser; the size/ratio caps bound any residual memory blow-up.
+- **Why:** open hardening item C — uploads are untrusted input.
+- **Verified (local, .venv):** normal TXT/DOCX/PDF parse unchanged; zip-bomb,
+  bad-zip-as-docx, garbage-PDF, and over-cap text each return a clean ValueError
+  with no stack trace (pypdf's own error stays in server logs); text cap honored
+  (500→100 chars). `py_compile app/parsing.py app/main.py` OK. Timeout path is
+  by-construction (not exercised with a real hanging file).
+
 ## 2026-06-17 — Add TailorCV logo (header, favicon, PDF cover)
 
 - **What:** Integrated the brand logo across the app. New assets in `app/static/`: `logo.png` (full 2048×2048 master from Nano Banana), `logo_icon.png` (655×655 transparent square icon, cropped from master), `logo_icon_flat.png` (same icon flattened on white for print), `favicon.ico`. Mounted `/static` via `StaticFiles` in `app/main.py`. Header (`index.html`) shows the icon mark + "TailorCV" wordmark; browser tab uses the favicon; PDF cover (`scripts/generate_install_guide.py`) shows the flat icon above the title banner.
