@@ -20,12 +20,12 @@ FastAPI backend + single-file HTML frontend (`app/static/index.html`). Upload 1�
 - `scripts/live_test.py` — live tailoring harness (run locally only)
 - `.claude/skills/release-check/SKILL.md` — session-close ritual
 
-## Status (2026-06-23)
-- **Latest push:** caching + robustness + resume-output-fix commit (agents.py, db.py,
-  export.py, main.py, CLAUDE.md, MEMORY.md, CHANGELOG.md, scripts/sandbox_verify.py)
-  pushed to `trendtubedev-lab/resume-builder` main by Michael from his own shell.
-  `[UNVERIFIED]` exact commit hash not captured this session — run `git rev-parse HEAD`
-  to confirm. (Prior push before this work: b0db009.)
+## Status (2026-06-24)
+- **Latest push:** `23cbb6c` — export professionalism pass (PDF bullet bug fix +
+  right-aligned dates, em dash, DOCX heading rules, unified margins, middot;
+  render_samples.py). Pushed to `trendtubedev-lab/resume-builder` main.
+  Prior pushes: `1fdd038` (claude-code-only finalize + dev tooling), then the
+  caching/robustness commit, then `b0db009`.
 - PROVIDER=claude-code confirmed working end-to-end; all 3 live_test samples pass fabrication check
 - **Per-user API key storage PERMANENTLY REMOVED** — USER_KEYS, /api/key routes, key card UI all gone. No billing path for any user.
 - **15 reviewer personas** in pool: original 4 (default on) + 11 new opt-in (Engineering Bar-Raiser, Leveling Calibrator, Career Narrative Strategist, Transferable Skills Interpreter, Attention & Perception Specialist, Domain Credentialing Auditor, Industry Format & Culture Fit Auditor, Competitive Field Analyst, Executive Presence Assessor, Commitment Signal Analyst, First-Impression Clarity Analyst)
