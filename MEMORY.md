@@ -13,10 +13,10 @@ FastAPI backend + single-file HTML frontend (`app/static/index.html`). Upload 1�
 - `app/personas.py` — 15 preset reviewer personas (4 default-enabled, 11 opt-in)
 - `app/auth.py` — Google OAuth (no key storage)
 - `app/parsing.py` — PDF/DOCX/TXT text extraction
-- `app/export.py` — PDF/Word rendering
-- `app/demo.py` — offline demo mode
+- `app/export.py` — PDF/Word rendering (3 templates: classic/banner/minimal)
 - `app/db.py` — SQLite persistence for tailored results
-- `scripts/export_check.py` — OFFLINE export self-test
+- `scripts/export_check.py` — OFFLINE export self-test (asserts magic bytes)
+- `scripts/render_samples.py` — OFFLINE: renders all 3 templates × PDF/DOCX to `output/samples/` for visual review
 - `scripts/live_test.py` — live tailoring harness (run locally only)
 - `.claude/skills/release-check/SKILL.md` — session-close ritual
 
@@ -42,14 +42,21 @@ Done this session:
 - **Retries** (`COMPLETION_ATTEMPTS=2`) around each model call incl. synthesizer (no more single-bad-parse 502).
 - **Concurrency cap** (`MAX_PANEL_WORKERS=6`) on the reviewer pool.
 - **Event loop**: `/api/tailor` runs panel+synth via `asyncio.to_thread`.
-- **export.py FIXED**: real `•` bullets (`start="bullet"`), comma-separated skills (all PDF+DOCX), right-aligned date tab stop (`_right_tab`, 6.5"), removed empty DOCX heading-spacer paragraphs, consistent heading spacing.
 - Default model stays **Sonnet** for reviewers + synth (per Michael's instruction).
 
-Still open in `app/export.py` (lower priority, not yet done):
-- DOCX: no explicit page margins (Word defaults ~1.25" — too wide for a resume)
-- DOCX: no HR rules under section headers (PDF has them; DOCX missing)
-- All templates: title/company line uses ` - ` separator, which looks dated
-- No render-time length/page-count control
+## Export polish (2026-06-24) — DONE, verified visually
+`app/export.py` professionalism pass (see CHANGELOG 2026-06-24). All fixed + eyeballed via `scripts/render_samples.py`:
+- **PDF bullet bug fixed.** `ListFlowable(..., start="bullet")` rendered the LITERAL WORD "bullet" over each item — it does NOT mean "use a bullet glyph". Now `start="•"`, `bulletFontSize=10`. (A prior MEMORY entry wrongly recorded `start="bullet"` as the fix — that was the bug.)
+- PDF dates right-aligned via borderless 2-col table (`_role_flowable`), matching DOCX.
+- Em dash (`EM = " — "`) between title/company + degree/school (was ` - `).
+- DOCX classic/minimal section headings get a bottom-border rule (`_bottom_border`) to match the PDF `HRFlowable`.
+- Margins unified to 0.75" PDF + DOCX (`_set_margins`; `_right_tab` moved 6.5"→7.0").
+- Minimal contact separator is now a middot `·` (`MIDDOT`), was a baseline `.`.
+
+Still open in `app/export.py` (lower priority):
+- No clickable hyperlinks (email/LinkedIn render as plain text) — deferred follow-up.
+- No render-time length/page-count control.
+- Skills still a single comma blob (categorising needs an AI-output schema change).
 
 ## Open / next
 - Resume output quality improvements (see Current focus above)

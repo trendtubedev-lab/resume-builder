@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-06-24 — Export polish: fix broken PDF bullets + professionalism pass
+
+- **What:** reworked `app/export.py` rendering across all 3 templates × 2 formats.
+  1. **Critical bug fix:** PDF bullets rendered the literal word "bullet" jammed
+     over each list item — caused by `ListFlowable(..., start="bullet")`. Now
+     real `•` glyphs (`start="•"`, `bulletFontSize=10`, gray). Every PDF download
+     was previously broken-looking.
+  2. PDF dates now right-aligned flush to the margin via a borderless 2-col table
+     (`_role_flowable`), matching the DOCX tab-stop behaviour (was inline gray).
+  3. Title—company / degree—school now joined with an em dash (was `" - "`).
+  4. DOCX classic/minimal section headings get a bottom-border rule to match the
+     PDF's `HRFlowable` (`_bottom_border`).
+  5. Unified margins to 0.75" across PDF and DOCX (`_set_margins`; DOCX
+     `_right_tab` moved 6.5"→7.0" to track the new content width).
+  6. Minimal contact separator switched from a baseline `.` to a middot `·`.
+- **Why:** user asked to make output "as professional as possible." Rendering the
+  3 templates to `output/samples/` surfaced the bullet bug visually — generic
+  resume advice would have missed it.
+- **Verified:** `python scripts/export_check.py` → ALL EXPORTS OK; added
+  `scripts/render_samples.py` (offline, renders all 6 combos) and visually
+  reviewed all 3 PDFs before/after — bullets, right-aligned dates, em dashes,
+  and section rules all correct. DOCX verified by successful build (no visual
+  renderer available locally).
+
 ## 2026-06-23 — Tooling: sandbox mount-corruption fast-fix
 
 - **What:** added `scripts/sandbox_verify.py` — diagnoses the recurring Cowork
