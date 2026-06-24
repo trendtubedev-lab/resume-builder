@@ -1,5 +1,88 @@
 # Changelog
 
+## 2026-06-23 — Tooling: sandbox mount-corruption fast-fix
+
+- **What:** added `scripts/sandbox_verify.py` — diagnoses the recurring Cowork
+  sandbox mount corruption (null-padded / truncated views of just-edited files),
+  stages null-stripped importable copies under `/tmp/proj`, and reports each
+  file OK / CORRUPTED-at-line so tests can run via `PYTHONPATH=/tmp/proj`.
+  Sharpened the MEMORY.md gotcha into a concrete recipe and pointed CLAUDE.md
+  preflight rule #2 at the helper.
+- **Why:** this session the manual diagnose-and-splice loop for mount corruption
+  took ~10 tool calls; the helper makes it 1–2.
+- **Verified:** ran `python3 scripts/sandbox_verify.py` — correctly flagged
+  agents.py (null-padded, auto-stripped OK) and export.py/main.py (truncated,
+  with exact splice lines), others clean.
+
+## 2026-06-23 — Caching, robustness, and resume-output fixes
+
+- **What:**
+  - `app/db.py`: new `completion_cache(cache_key, result, created_at)` table +
+    `get_cached_completion()` / `save_cached_completion()`.
+  - `app/agents.py`: added `_cache_key()` (sha256 of model+system+user) and
+    `_complete_json()` — a cache-and-retry wrapper. Identical (model, system, user)
+    calls are now served from SQLite, skipping the model round-trip entirely
+    (re-running the same resume+JD is free/instant). Only successfully-parsed
+    results are cached. Retries each call up to `COMPLETION_ATTEMPTS` (2) on a
+    transient CLI failure or unparseable JSON; `synthesize()` no longer 502s on a
+    single bad parse. `_review_one()` and `synthesize()` now route through
+    `_complete_json()`. Capped reviewer concurrency at `MAX_PANEL_WORKERS` (6) so a
+    large persona set can't spawn unbounded `claude` subprocesses.
+  - `app/main.py`: `/api/tailor` now runs `run_panel()` and `synthesize()` via
+    `asyncio.to_thread(...)` so the blocking CLI calls no longer stall the event
+    loop / other requests.
+  - `app/export.py`: PDF bullets now use `start="bullet"` (real • glyph, not a
+    literal `*`); skills rendered comma-separated in all PDF + DOCX templates
+    (was ` * ` / `  .  `, which corrupts ATS keyword parsing); DOCX role/education
+    lines get a right-aligned tab stop at 6.5" (`_right_tab()`) so dates align to
+    the margin instead of colliding with long titles; removed the empty spacer
+    paragraph after the classic DOCX heading (replaced with `space_before/after`
+    on the heading); added consistent heading spacing to banner/minimal DOCX.
+  - `CLAUDE.md`: corrected stale "Requires `ANTHROPIC_API_KEY`" note — the code
+    uses the local `claude` CLI only and never reads an API key. Kept Sonnet as
+    the default reviewer + synth model per request.
+- **Why:** caching/token-savings + robustness pass; the resume-output `*`/tab
+  issues were confirmed by rendering real sample files and re-parsing them.
+- **Verified:** `python -c "import app.agents, app.db, app.main, app.export"`
+  compiles clean; re-rendered the Priya Nair sample to DOCX/PDF and re-parsed —
+  bullets are real •, skills comma-separated, dates right-aligned. (No `claude`
+  CLI call needed; export + cache tested directly.)
+
+## 2026-06-23 — Strip API/demo mode; claude-code only
+
+- **What:**
+  - `app/agents.py`: removed `import anthropic`, `import httpx`, `_http_client()`,
+    `_client()`, `using_claude_code()`, `_truthy()`, `_text()`, `_api_complete()`,
+    `REVIEWER_TEMPERATURE`, `SYNTH_TEMPERATURE`. Removed `api_key` param from
+    `complete()`, `_review_one()`, `run_panel()`, `synthesize()`. `complete()` now
+    calls `_claude_code_complete()` directly. `preflight()` simplified to just check
+    for the `claude` CLI.
+  - `app/main.py`: removed `demo` import; removed `is_demo`/`server_key` logic from
+    `/api/tailor`; removed `provider`/`demo` fields from `/api/me` response; removed
+    `ANTHROPIC_API_KEY` comment references; updated docstring.
+  - `app/demo.py`: **deleted**.
+  - `app/auth.py`: updated docstring (removed API key reference).
+  - `app/static/index.html`: removed `demo-banner` element; simplified `renderBanners()`
+    (cc-banner is now always visible, no toggle); removed Demo Mode troubleshooting
+    entry; removed "What's demo mode?" FAQ; updated timeout copy (1–3 min, not 30–60s);
+    updated login page hint.
+  - `.env.example`: removed `PROVIDER` and `ANTHROPIC_API_KEY` sections; removed
+    corporate proxy block.
+  - `requirements.txt`: removed `anthropic==0.42.0`.
+  - `README.md`: removed "Accounts & API keys" section; removed Demo Mode section;
+    removed "Behind a corporate proxy" section; rewrote config table (no API key rows);
+    updated cost/usage note.
+  - `QUICKSTART_FRIENDS.md`: removed `PROVIDER=claude-code` from Step 3 (no longer needed).
+  - `scripts/live_test.py`: removed API key warning block; removed `import os`.
+  - `scripts/generate_install_guide.py`: removed Option B (API key) from prerequisites,
+    Step 3 config, FAQ, and troubleshooting table.
+- **Why:** App is for Claude Desktop / local claude-code use only. No API key path,
+  no demo mode, no hosted mode. Simplifies the codebase and removes confusing paths.
+- **Verified:** Host-side Read confirms all edits applied correctly. Final grep for
+  `ANTHROPIC_API_KEY`, `import anthropic`, `using_claude_code`, `is_demo`, `demo_panel`
+  returns no matches across app/ and scripts/. `py_compile` skipped (sandbox sees
+  corrupted main.py — known host/sandbox mismatch; files confirmed clean via Read tool).
+
 Newest entries on top. Each entry: what changed, why, and how it was verified.
 
 ## 2026-06-17 — Remove per-user Anthropic API key storage entirely

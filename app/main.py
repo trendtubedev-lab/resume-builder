@@ -1,11 +1,11 @@
 """TailorCV — local web app that tailors resumes to a job using a Claude review panel.
 
 Run locally:  python -m app.main   (or: uvicorn app.main:app --reload)
-Deploy:       it's a standard ASGI app — see README for Render/Fly/Docker.
+Deploy:       it's a standard ASGI app — see README.
 
 Auth: Google sign-in (Authlib). Set AUTH_DISABLED=1 to bypass for local use.
-AI: PROVIDER=claude-code routes through the user's local Claude plan (no API key).
-    For hosted mode, set ANTHROPIC_API_KEY in .env (server-level only).
+AI:   Calls route through the local `claude` CLI on the user's own Pro/Max plan.
+      No Anthropic API key required.
 """
 from __future__ import annotations
 
@@ -19,9 +19,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Load .env BEFORE importing our packages: agents/auth read env vars (PROVIDER,
-# REVIEWER_MODEL, ANTHROPIC_API_KEY, ...) at import time, so .env must be in
-# os.environ first or those values silently fall back to defaults.
+# Load .env BEFORE importing our packages: agents/auth read env vars
+# (REVIEWER_MODEL, etc.) at import time, so .env must be in os.environ first.
 load_dotenv()
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Body
@@ -29,13 +28,12 @@ from fastapi.responses import HTMLResponse, Response, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import agents, auth, db, demo, export, parsing, personas
+from . import agents, auth, db, export, parsing, personas
 
 log = logging.getLogger("tailorcv")
 
 # Session cookies are signed with SESSION_SECRET. If it's missing or left at a
-# placeholder, anyone could forge a cookie for any user (full auth bypass, and
-# with a server-wide ANTHROPIC_API_KEY, free use of the operator's key). So we
+# placeholder, anyone could forge a cookie for any user (full auth bypass). So we
 # refuse to boot insecurely when auth is enabled.
 _PLACEHOLDER_SECRETS = {
     "",
@@ -152,27 +150,39 @@ def health() -> dict:
 
 @app.get("/api/me")
 def me(request: Request) -> dict:
-    """Who am I, and would a run use demo mode?"""
-    cc = agents.using_claude_code()
+    """Who am I?"""
     user = auth.current_user(request)
     if not user:
-        return {"authenticated": False, "oauth_configured": auth.oauth_configured(),
-                "provider": "claude-code" if cc else "api"}
-    # demo = no claude-code AND no server-level key in .env
-    server_key = bool(os.getenv("ANTHROPIC_API_KEY"))
+        return {"authenticated": False, "oauth_configured": auth.oauth_configured()}
     return {
         "authenticated": True,
         "email": user["email"],
         "name": user["name"],
         "picture": user.get("picture", ""),
-        "provider": "claude-code" if cc else "api",
-        "demo": (not cc) and (not server_key),
     }
 
 
 @app.get("/api/samples")
 def list_samples() -> dict:
     return {"samples": [{"id": s["id"], "label": s["label"]} for s in SAMPLES]}
+
+
+@app.post("/api/parse-job")
+async def parse_job_file(request: Request, file: UploadFile = File(...)) -> dict:
+    """Accept a PDF, DOCX, or TXT and return its text for the job description field."""
+    auth.require_user(request)
+    data = await _read_capped(file, MAX_BYTES)
+    try:
+        loop = asyncio.get_event_loop()
+        text = await asyncio.wait_for(
+            loop.run_in_executor(None, parsing.extract_text, file.filename, data),
+            timeout=PARSE_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(408, f"Parsing '{file.filename}' timed out.")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return {"text": text}
 
 
 @app.get("/api/samples/{sample_id}")
@@ -234,19 +244,17 @@ async def tailor(
         chunks.append(f"--- {f.filename} ---\n{text}")
     resume_text = "\n\n".join(chunks)
 
-    cc = agents.using_claude_code()
-    # Server-level key only — no per-user keys. None is fine for claude-code mode.
-    server_key = os.getenv("ANTHROPIC_API_KEY") or None
-    is_demo = (not cc) and (not server_key)
     try:
-        if is_demo:
-            panel = demo.demo_panel(resume_text, job_description)
-            resume = demo.demo_synthesize(resume_text, job_description, tone)
-        else:
-            panel = agents.run_panel(resume_text, job_description, api_key=server_key,
-                                   user_email=user["email"],
-                                   selected_keys=selected_personas or None)
-            resume = agents.synthesize(resume_text, job_description, panel, tone, api_key=server_key)
+        # The panel + synthesis make several blocking `claude` CLI calls. Run
+        # them off the event loop so one tailoring run doesn't stall every other
+        # request (health checks, other users) for minutes.
+        panel = await asyncio.to_thread(
+            agents.run_panel, resume_text, job_description,
+            user["email"], selected_personas or None,
+        )
+        resume = await asyncio.to_thread(
+            agents.synthesize, resume_text, job_description, panel, tone,
+        )
     except RuntimeError as e:
         raise HTTPException(503, str(e))
     except Exception as e:
@@ -258,7 +266,6 @@ async def tailor(
     return JSONResponse(
         {
             "job_id": job_id,
-            "demo": is_demo,
             "overall_score": agents.overall_score(panel),
             "panel": panel,
             "resume": resume,
@@ -268,22 +275,24 @@ async def tailor(
 
 
 @app.get("/api/download/{job_id}")
-def download(request: Request, job_id: str, format: str = "pdf"):
+def download(request: Request, job_id: str, format: str = "pdf", template: str = "classic"):
     user = auth.require_user(request)
     item = db.get_result(job_id)
     if not item or item.get("owner") != user["email"]:
         raise HTTPException(404, "Result not found. Generate again.")
     resume = item["resume"]
     name = _safe_filename(resume.get("name"))
+    if template not in {"classic", "banner", "minimal"}:
+        template = "classic"
     if format == "docx":
         return Response(
-            content=export.build_docx(resume),
+            content=export.build_docx(resume, template=template),
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             headers={"Content-Disposition": f'attachment; filename="{name}_tailored.docx"'},
         )
     if format == "pdf":
         return Response(
-            content=export.build_pdf(resume),
+            content=export.build_pdf(resume, template=template),
             media_type="application/pdf",
             headers={"Content-Disposition": f'attachment; filename="{name}_tailored.pdf"'},
         )

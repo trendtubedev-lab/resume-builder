@@ -1,4 +1,4 @@
-"""Multi-agent review panel + tailored-resume synthesis via the Claude API.
+"""Multi-agent review panel + tailored-resume synthesis via the local Claude CLI.
 
 Flow:
   1. Several reviewer personas independently critique the candidate's resume(s)
@@ -7,9 +7,12 @@ Flow:
      incorporating the panel's feedback, and returns structured JSON.
 
 Each reviewer runs in its own thread so the panel completes in parallel.
+Calls route through the local `claude` CLI on the user's own Pro/Max plan —
+no Anthropic API key required.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -20,12 +23,16 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from functools import lru_cache
 
-import anthropic
-import httpx
-
 log = logging.getLogger("tailorcv")
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
+
+# Max concurrent `claude` subprocesses (a large persona set could otherwise
+# spawn one process each and trip plan rate limits / starve the machine).
+MAX_PANEL_WORKERS = 6
+# How many times to (re)try a single model call before giving up. Covers
+# transient CLI hiccups and the occasional unparseable JSON response.
+COMPLETION_ATTEMPTS = 2
 
 # Read lazily (not at import) so .env is honored regardless of load ordering.
 def reviewer_model() -> str:
@@ -35,17 +42,9 @@ def reviewer_model() -> str:
 def synth_model() -> str:
     return os.getenv("SYNTH_MODEL", DEFAULT_MODEL)
 
-# Where completions are routed:
-#   "api"         — Anthropic API, using a per-user or server ANTHROPIC_API_KEY (hosted default).
-#   "claude-code" — the user's LOCAL Claude Code CLI, on their own Pro/Max plan (no API key).
-# See QUICKSTART_FRIENDS.md for the local setup.
-# PROVIDER and the timeout are read lazily (using_claude_code() / _cc_timeout())
-# so they honor .env no matter when it is loaded relative to this import.
-DEFAULT_CC_TIMEOUT = 180
 
-# Low temperature for consistent, calibrated output.
-REVIEWER_TEMPERATURE = 0.2
-SYNTH_TEMPERATURE = 0.3
+# Seconds to wait on a single claude CLI call before timing out.
+DEFAULT_CC_TIMEOUT = 180
 
 REVIEWER_SYSTEM = (
     "You are part of a blind resume review panel. You review independently and do "
@@ -78,70 +77,6 @@ def _load_personas(user_email: str) -> list[Persona]:
     return [Persona(p.key, p.name, p.brief) for p in get_personas(user_email)]
 
 
-def _truthy(name: str) -> bool:
-    return os.getenv(name, "").lower() in {"1", "true", "yes", "on"}
-
-
-@lru_cache(maxsize=1)
-def _http_client() -> httpx.Client | None:
-    """Build a proxy-aware HTTP client from env, or None to use the SDK default.
-
-    The Anthropic SDK already honors standard proxy env vars (HTTPS_PROXY, etc.)
-    out of the box, so we only build a custom client when extra config is set:
-
-      ANTHROPIC_PROXY           explicit proxy URL (overrides env autodetection)
-      ANTHROPIC_CA_BUNDLE       path to a corporate root CA (for TLS-inspecting proxies)
-      ANTHROPIC_SKIP_TLS_VERIFY=1  disable TLS verification (INSECURE — last resort)
-
-    Returns None when none of these are set, so default deployments are unaffected.
-    """
-    proxy = os.getenv("ANTHROPIC_PROXY") or os.getenv("HTTPS_PROXY") or os.getenv("https_proxy")
-    ca_bundle = os.getenv("ANTHROPIC_CA_BUNDLE")
-    skip_verify = _truthy("ANTHROPIC_SKIP_TLS_VERIFY")
-
-    if not (os.getenv("ANTHROPIC_PROXY") or ca_bundle or skip_verify):
-        return None  # nothing special — let the SDK manage its own client
-
-    if skip_verify:
-        verify: bool | str = False
-        log.warning(
-            "TLS verification is DISABLED (ANTHROPIC_SKIP_TLS_VERIFY). "
-            "Only use this behind a trusted corporate proxy."
-        )
-    elif ca_bundle:
-        verify = ca_bundle
-    else:
-        verify = True
-
-    kwargs: dict = {"timeout": 120.0, "trust_env": True, "verify": verify}
-    if proxy:
-        kwargs["proxy"] = proxy
-    return httpx.Client(**kwargs)
-
-
-@lru_cache(maxsize=8)
-def _client(api_key: str | None = None) -> anthropic.Anthropic:
-    # Cached by key so a single tailoring run (4 reviewers + 1 synth) reuses one
-    # client instead of constructing five. lru_cache does not cache the raises below.
-    key = api_key or os.getenv("ANTHROPIC_API_KEY")
-    if not key:
-        raise RuntimeError(
-            "No Anthropic API key. Add your key in the app, or set ANTHROPIC_API_KEY."
-        )
-    hc = _http_client()
-    if hc is not None:
-        return anthropic.Anthropic(api_key=key, http_client=hc)
-    return anthropic.Anthropic(api_key=key)
-
-
-# --- provider layer --------------------------------------------------------
-# Both reviewer and synthesizer go through complete(): it returns the model's
-# raw response text (a JSON object as a string) for _parse_json to handle.
-
-def using_claude_code() -> bool:
-    return os.getenv("PROVIDER", "api").strip().lower() in {"claude-code", "claude_code", "cc"}
-
-
 def _cc_timeout() -> int:
     """CLAUDE_CODE_TIMEOUT as an int, tolerant of a bad value (no boot crash)."""
     raw = os.getenv("CLAUDE_CODE_TIMEOUT", str(DEFAULT_CC_TIMEOUT))
@@ -159,43 +94,64 @@ def _claude_exe() -> str | None:
 
 
 def preflight() -> None:
-    """Validate the selected provider at startup. Raises with a friendly message."""
-    if using_claude_code():
-        if _claude_exe() is None:
-            raise RuntimeError(
-                "PROVIDER=claude-code but the `claude` command was not found. "
-                "Install Claude Code and sign in, then restart. "
-                "See QUICKSTART_FRIENDS.md."
-            )
-        log.info("Provider: claude-code (local Claude Code CLI, user's own plan).")
-    else:
-        log.info("Provider: api (Anthropic API key).")
+    """Validate at startup that the `claude` CLI is available. Raises with a friendly message."""
+    if _claude_exe() is None:
+        raise RuntimeError(
+            "The `claude` command was not found. "
+            "Install Claude Code and sign in, then restart. "
+            "See QUICKSTART_FRIENDS.md."
+        )
+    log.info("Provider: claude-code (local Claude Code CLI, user's own plan).")
 
 
-def complete(system: str, user: str, model: str, max_tokens: int,
-             temperature: float, api_key: str | None) -> str:
+def complete(system: str, user: str, model: str) -> str:
     """Return the model's raw text response (expected to be a JSON object)."""
-    if using_claude_code():
-        return _claude_code_complete(system, user, model)
-    return _api_complete(system, user, model, max_tokens, temperature, api_key)
+    return _claude_code_complete(system, user, model)
 
 
-def _api_complete(system: str, user: str, model: str, max_tokens: int,
-                  temperature: float, api_key: str | None) -> str:
-    client = _client(api_key)
-    # No assistant-message prefill: newer models (e.g. claude-sonnet-4-6) reject
-    # it ("does not support assistant message prefill"). The prompts already ask
-    # for JSON-only and _parse_json() strips fences / extracts the outer object.
-    msg = client.messages.create(
-        model=model,
-        max_tokens=max_tokens,
-        temperature=temperature,
-        system=system,
-        messages=[
-            {"role": "user", "content": user},
-        ],
-    )
-    return _text(msg)
+def _cache_key(system: str, user: str, model: str) -> str:
+    """Stable hash of the full request. Identical resume+JD+persona => same key."""
+    h = hashlib.sha256()
+    h.update(model.encode("utf-8"))
+    h.update(b"\x00")
+    h.update(system.encode("utf-8"))
+    h.update(b"\x00")
+    h.update(user.encode("utf-8"))
+    return h.hexdigest()
+
+
+def _complete_json(system: str, user: str, model: str) -> dict:
+    """Cache-and-retry wrapper that returns parsed JSON.
+
+    - Dedup: an identical (model, system, user) call is served from the SQLite
+      completion cache, skipping the model round-trip entirely. Because the
+      whole resume + job description live in `user`, re-running the same inputs
+      (or a barely-changed one) is free and instant.
+    - Retry: transient CLI failures or an unparseable response are retried up
+      to COMPLETION_ATTEMPTS times. Only successfully-parsed results are cached.
+    """
+    from app import db  # local import avoids a circular import at module load
+
+    key = _cache_key(system, user, model)
+    cached = db.get_cached_completion(key)
+    if cached is not None:
+        try:
+            return _parse_json(cached)
+        except Exception:
+            pass  # corrupt cache entry — fall through and regenerate
+
+    last_err: Exception | None = None
+    for attempt in range(1, COMPLETION_ATTEMPTS + 1):
+        try:
+            raw = complete(system, user, model)
+            data = _parse_json(raw)
+            db.save_cached_completion(key, raw)
+            return data
+        except Exception as e:
+            last_err = e
+            log.warning("Completion attempt %d/%d failed: %s",
+                        attempt, COMPLETION_ATTEMPTS, e)
+    raise RuntimeError(f"Model call failed after {COMPLETION_ATTEMPTS} attempts: {last_err}")
 
 
 def _claude_code_complete(system: str, user: str, model: str) -> str:
@@ -254,7 +210,7 @@ def _claude_code_complete(system: str, user: str, model: str) -> str:
     return str(payload.get("result", ""))
 
 
-def _review_one(persona: Persona, resume_text: str, job: str, api_key: str | None) -> dict:
+def _review_one(persona: Persona, resume_text: str, job: str) -> dict:
     prompt = f"""Your lens: {persona.name}. {persona.brief}
 
 Review the candidate's resume(s) below against the TARGET JOB through that lens only.
@@ -280,15 +236,13 @@ Output a JSON object of exactly this shape (no other text):
   "gaps": [<up to 5 short strings: missing skills, keywords, or evidence>],
   "suggestions": [<up to 6 short, actionable rewrite suggestions>]
 }}"""
-    raw = complete(REVIEWER_SYSTEM, prompt, reviewer_model(), 2000,
-                   REVIEWER_TEMPERATURE, api_key)
-    data = _parse_json(raw)
+    data = _complete_json(REVIEWER_SYSTEM, prompt, reviewer_model())
     data["persona"] = persona.name
     data["key"] = persona.key
     return data
 
 
-def run_panel(resume_text: str, job: str, api_key: str | None = None,
+def run_panel(resume_text: str, job: str,
               user_email: str = "local@localhost",
               selected_keys: list[str] | None = None) -> list[dict]:
     """Run reviewer personas in parallel. Returns a list of critiques.
@@ -306,9 +260,10 @@ def run_panel(resume_text: str, job: str, api_key: str | None = None,
         default_keys = {p.key for p in PRESET_PERSONAS if p.default_enabled}
         panel_personas = [p for p in _load_personas(user_email) if p.key in default_keys]
     results: list[dict] = []
-    with ThreadPoolExecutor(max_workers=len(panel_personas)) as ex:
+    workers = max(1, min(len(panel_personas), MAX_PANEL_WORKERS))
+    with ThreadPoolExecutor(max_workers=workers) as ex:
         futures = {
-            ex.submit(_review_one, p, resume_text, job, api_key): p for p in panel_personas
+            ex.submit(_review_one, p, resume_text, job): p for p in panel_personas
         }
         for fut in as_completed(futures):
             p = futures[fut]
@@ -330,8 +285,7 @@ def run_panel(resume_text: str, job: str, api_key: str | None = None,
     return results
 
 
-def synthesize(resume_text: str, job: str, panel: list[dict], tone: str = "professional",
-               api_key: str | None = None) -> dict:
+def synthesize(resume_text: str, job: str, panel: list[dict], tone: str = "professional") -> dict:
     """Rewrite the resume into a tailored version using the panel's feedback."""
     panel_json = json.dumps(panel, indent=2)
     prompt = f"""Rewrite the candidate's resume into a SINGLE tailored version optimized
@@ -381,8 +335,7 @@ Output a JSON object of exactly this shape (no other text):
   ],
   "change_summary": [<3-6 short strings describing the key tailoring changes you made>]
 }}"""
-    raw = complete(SYNTH_SYSTEM, prompt, synth_model(), 8000, SYNTH_TEMPERATURE, api_key)
-    return _parse_json(raw)
+    return _complete_json(SYNTH_SYSTEM, prompt, synth_model())
 
 
 def overall_score(panel: list[dict]) -> int | None:
@@ -393,10 +346,6 @@ def overall_score(panel: list[dict]) -> int | None:
 
 
 # --- helpers ---------------------------------------------------------------
-
-def _text(msg) -> str:
-    return "".join(block.text for block in msg.content if block.type == "text")
-
 
 def _parse_json(s: str) -> dict:
     s = s.strip()

@@ -54,15 +54,13 @@ cp .env.example .env
 
 (Windows PowerShell: `Copy-Item .env.example .env`)
 
-Open `.env` in any text editor and set these three lines:
+Open `.env` in any text editor and set these two lines:
 
 ```
-PROVIDER=claude-code
 AUTH_DISABLED=1
 SESSION_SECRET=any-long-random-text-you-make-up-here
 ```
 
-- `PROVIDER=claude-code` → use your local Claude plan.
 - `AUTH_DISABLED=1` → skip Google login; run as a single local user.
 - `SESSION_SECRET` → just mash some random characters; it only needs to exist.
 
@@ -88,7 +86,7 @@ paste a job description, and hit **Tailor my resume**.
 |---|---|
 | App won't start, mentions `claude` not found | Claude Code isn't installed or not on PATH. Redo Step 1, then **open a new terminal** and try again. |
 | "Are you signed in? Run `claude` once to log in." | Redo Step 2 — run `claude`, sign in with your subscription. |
-| A **yellow demo banner** instead of green | `.env` doesn't have `PROVIDER=claude-code`. Check Step 3, then restart. |
+| A **yellow demo banner** instead of green | This shouldn't happen — TailorCV always uses your local Claude plan. If you see it, restart the app. |
 | "timed out" | A single run took too long. Re-run; if it keeps happening, raise `CLAUDE_CODE_TIMEOUT` in `.env`. |
 
 ## A couple of honest notes

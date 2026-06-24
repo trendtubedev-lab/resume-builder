@@ -43,6 +43,13 @@ def init_db() -> None:
                 created_at  TEXT NOT NULL
             )
         """)
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS completion_cache (
+                cache_key  TEXT PRIMARY KEY,
+                result     TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+        """)
 
 
 # ---------------------------------------------------------------------------
@@ -69,6 +76,30 @@ def get_result(job_id: str) -> dict | None:
     if row is None:
         return None
     return {"resume": json.loads(row["resume_json"]), "owner": row["owner"]}
+
+
+# ---------------------------------------------------------------------------
+# completion cache (dedup identical model calls — saves a full AI round-trip)
+# ---------------------------------------------------------------------------
+
+def get_cached_completion(cache_key: str) -> str | None:
+    """Return a previously stored model result for this key, or None."""
+    with _connect() as con:
+        row = con.execute(
+            "SELECT result FROM completion_cache WHERE cache_key = ?",
+            (cache_key,),
+        ).fetchone()
+    return row["result"] if row else None
+
+
+def save_cached_completion(cache_key: str, result: str) -> None:
+    """Store a model result keyed by a hash of (model, system, user)."""
+    with _connect() as con:
+        con.execute(
+            "INSERT OR REPLACE INTO completion_cache (cache_key, result, created_at) "
+            "VALUES (?, ?, ?)",
+            (cache_key, result, datetime.now(timezone.utc).isoformat()),
+        )
 
 
 # ---------------------------------------------------------------------------

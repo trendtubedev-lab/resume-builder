@@ -1,6 +1,11 @@
-"""Render a structured tailored resume into .docx and .pdf files."""
-from __future__ import annotations
+"""Render a structured tailored resume into .docx and .pdf files.
 
+Three visual templates:
+  classic  - centred header, navy section rules (default)
+  banner   - full-width navy header band, left-accent section bars
+  minimal  - left-aligned, charcoal accents, clean whitespace
+"""
+from __future__ import annotations
 import io
 
 
@@ -9,187 +14,358 @@ def _g(d: dict, key: str, default=""):
     return v if v is not None else default
 
 
-def build_docx(resume: dict) -> bytes:
-    from docx import Document
-    from docx.shared import Pt, RGBColor
-    from docx.enum.text import WD_ALIGN_PARAGRAPH
-
-    doc = Document()
-    style = doc.styles["Normal"]
-    style.font.name = "Calibri"
-    style.font.size = Pt(10.5)
-
-    # Header: name + contact
-    name = _g(resume, "name") or "Your Name"
-    h = doc.add_paragraph()
-    h.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = h.add_run(name)
-    run.bold = True
-    run.font.size = Pt(20)
-
+def _contact_bits(resume: dict) -> list:
     contact = _g(resume, "contact", {}) or {}
     bits = [contact.get("email"), contact.get("phone"), contact.get("location")]
     bits += list(contact.get("links") or [])
-    bits = [b for b in bits if b]
-    if bits:
-        c = doc.add_paragraph(" | ".join(bits))
-        c.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        c.runs[0].font.size = Pt(9.5)
-
-    def section(title: str):
-        p = doc.add_paragraph()
-        r = p.add_run(title.upper())
-        r.bold = True
-        r.font.size = Pt(12)
-        r.font.color.rgb = RGBColor(0x1A, 0x4D, 0x7A)
-        pbdr = doc.add_paragraph()
-        pbdr.paragraph_format.space_before = Pt(0)
-        pbdr.paragraph_format.space_after = Pt(2)
-        return p
-
-    if _g(resume, "summary"):
-        section("Summary")
-        doc.add_paragraph(resume["summary"])
-
-    skills = _g(resume, "skills", []) or []
-    if skills:
-        section("Skills")
-        doc.add_paragraph(" • ".join(str(s) for s in skills))
-
-    exp = _g(resume, "experience", []) or []
-    if exp:
-        section("Experience")
-        for job in exp:
-            p = doc.add_paragraph()
-            title = _g(job, "title")
-            company = _g(job, "company")
-            line = title
-            if company:
-                line = f"{title} — {company}" if title else company
-            r = p.add_run(line)
-            r.bold = True
-            meta = " | ".join(x for x in [_g(job, "location"), _g(job, "dates")] if x)
-            if meta:
-                p.add_run(f"\t{meta}").italic = True
-            for b in _g(job, "bullets", []) or []:
-                doc.add_paragraph(str(b), style="List Bullet")
-
-    edu = _g(resume, "education", []) or []
-    if edu:
-        section("Education")
-        for e in edu:
-            p = doc.add_paragraph()
-            deg = _g(e, "degree")
-            school = _g(e, "school")
-            line = " — ".join(x for x in [deg, school] if x)
-            p.add_run(line).bold = True
-            meta = " | ".join(x for x in [_g(e, "location"), _g(e, "dates")] if x)
-            if meta:
-                p.add_run(f"\t{meta}").italic = True
-            if _g(e, "details"):
-                doc.add_paragraph(str(e["details"]))
-
-    for block in _g(resume, "additional", []) or []:
-        heading = _g(block, "heading")
-        items = _g(block, "items", []) or []
-        if heading and items:
-            section(heading)
-            for it in items:
-                doc.add_paragraph(str(it), style="List Bullet")
-
-    buf = io.BytesIO()
-    doc.save(buf)
-    return buf.getvalue()
+    return [b for b in bits if b]
 
 
-def build_pdf(resume: dict) -> bytes:
+# ── PDF ──────────────────────────────────────────────────────────────────────
+
+def build_pdf(resume: dict, template: str = "classic") -> bytes:
+    if template == "banner":
+        return _pdf_banner(resume)
+    if template == "minimal":
+        return _pdf_minimal(resume)
+    return _pdf_classic(resume)
+
+
+def _pdf_classic(resume: dict) -> bytes:
     from reportlab.lib.pagesizes import LETTER
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import inch
     from reportlab.lib.colors import HexColor
     from reportlab.lib.enums import TA_CENTER
     from reportlab.platypus import (
-        SimpleDocTemplate,
-        Paragraph,
-        Spacer,
-        HRFlowable,
-        ListFlowable,
-        ListItem,
+        SimpleDocTemplate, Paragraph, HRFlowable, ListFlowable, ListItem,
     )
-
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buf, pagesize=LETTER,
-        leftMargin=0.7 * inch, rightMargin=0.7 * inch,
-        topMargin=0.6 * inch, bottomMargin=0.6 * inch,
-    )
+    doc = SimpleDocTemplate(buf, pagesize=LETTER,
+        leftMargin=0.7*inch, rightMargin=0.7*inch,
+        topMargin=0.6*inch, bottomMargin=0.6*inch)
     ss = getSampleStyleSheet()
     accent = HexColor("#1A4D7A")
-    name_style = ParagraphStyle("name", parent=ss["Title"], fontSize=22, alignment=TA_CENTER, spaceAfter=2)
-    contact_style = ParagraphStyle("contact", parent=ss["Normal"], fontSize=9, alignment=TA_CENTER, textColor=HexColor("#444444"))
-    sec_style = ParagraphStyle("sec", parent=ss["Heading2"], fontSize=12, textColor=accent, spaceBefore=10, spaceAfter=2)
-    body = ParagraphStyle("body", parent=ss["Normal"], fontSize=10.5, leading=14)
-    role = ParagraphStyle("role", parent=body, fontSize=11, spaceBefore=4)
-    meta = ParagraphStyle("meta", parent=body, fontSize=9, textColor=HexColor("#555555"))
+    name_s = ParagraphStyle("name", parent=ss["Title"], fontSize=22, alignment=TA_CENTER, spaceAfter=2)
+    cont_s = ParagraphStyle("cont", parent=ss["Normal"], fontSize=9, alignment=TA_CENTER, textColor=HexColor("#444444"), spaceAfter=6)
+    sec_s  = ParagraphStyle("sec",  parent=ss["Heading2"], fontSize=12, textColor=accent, spaceBefore=10, spaceAfter=2)
+    body_s = ParagraphStyle("body", parent=ss["Normal"], fontSize=10.5, leading=14)
+    role_s = ParagraphStyle("role", parent=body_s, fontSize=11, spaceBefore=4)
 
     flow = []
-
-    def esc(s):
-        return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
-
-    flow.append(Paragraph(esc(_g(resume, "name") or "Your Name"), name_style))
-    contact = _g(resume, "contact", {}) or {}
-    bits = [contact.get("email"), contact.get("phone"), contact.get("location")]
-    bits += list(contact.get("links") or [])
-    bits = [esc(b) for b in bits if b]
-    if bits:
-        flow.append(Paragraph(" &nbsp;|&nbsp; ".join(bits), contact_style))
-
+    def esc(s): return str(s).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
     def section(title):
-        flow.append(Paragraph(esc(title).upper(), sec_style))
+        flow.append(Paragraph(esc(title).upper(), sec_s))
         flow.append(HRFlowable(width="100%", thickness=0.6, color=accent, spaceAfter=4))
-
     def bullets(items):
-        lis = [ListItem(Paragraph(esc(b), body), leftIndent=10) for b in items if b]
-        if lis:
-            flow.append(ListFlowable(lis, bulletType="bullet", start="•", leftIndent=12))
+        lis = [ListItem(Paragraph(esc(b), body_s), leftIndent=10) for b in items if b]
+        if lis: flow.append(ListFlowable(lis, bulletType="bullet", start="bullet", leftIndent=12))
 
-    if _g(resume, "summary"):
-        section("Summary")
-        flow.append(Paragraph(esc(resume["summary"]), body))
-
-    skills = _g(resume, "skills", []) or []
-    if skills:
-        section("Skills")
-        flow.append(Paragraph(" &nbsp;•&nbsp; ".join(esc(s) for s in skills), body))
-
-    exp = _g(resume, "experience", []) or []
+    flow.append(Paragraph(esc(_g(resume,"name") or "Your Name"), name_s))
+    bits = _contact_bits(resume)
+    if bits: flow.append(Paragraph(" &nbsp;|&nbsp; ".join(esc(b) for b in bits), cont_s))
+    if _g(resume,"summary"): section("Summary"); flow.append(Paragraph(esc(resume["summary"]), body_s))
+    skills = _g(resume,"skills",[]) or []
+    if skills: section("Skills"); flow.append(Paragraph(", ".join(esc(s) for s in skills), body_s))
+    exp = _g(resume,"experience",[]) or []
     if exp:
         section("Experience")
         for job in exp:
-            title = _g(job, "title")
-            company = _g(job, "company")
-            line = " — ".join(x for x in [title, company] if x)
-            m = " | ".join(x for x in [_g(job, "location"), _g(job, "dates")] if x)
-            flow.append(Paragraph(f"<b>{esc(line)}</b>" + (f"  <font size=9 color='#555555'>{esc(m)}</font>" if m else ""), role))
-            bullets(_g(job, "bullets", []) or [])
-
-    edu = _g(resume, "education", []) or []
+            line = " - ".join(x for x in [_g(job,"title"),_g(job,"company")] if x)
+            m    = " | ".join(x for x in [_g(job,"location"),_g(job,"dates")] if x)
+            flow.append(Paragraph(f"<b>{esc(line)}</b>" + (f"  <font size=9 color='#555555'>{esc(m)}</font>" if m else ""), role_s))
+            bullets(_g(job,"bullets",[]) or [])
+    edu = _g(resume,"education",[]) or []
     if edu:
         section("Education")
         for e in edu:
-            line = " — ".join(x for x in [_g(e, "degree"), _g(e, "school")] if x)
-            m = " | ".join(x for x in [_g(e, "location"), _g(e, "dates")] if x)
-            flow.append(Paragraph(f"<b>{esc(line)}</b>" + (f"  <font size=9 color='#555555'>{esc(m)}</font>" if m else ""), role))
-            if _g(e, "details"):
-                flow.append(Paragraph(esc(e["details"]), body))
-
-    for block in _g(resume, "additional", []) or []:
-        heading = _g(block, "heading")
-        items = _g(block, "items", []) or []
-        if heading and items:
-            section(heading)
-            bullets(items)
-
+            line = " - ".join(x for x in [_g(e,"degree"),_g(e,"school")] if x)
+            m    = " | ".join(x for x in [_g(e,"location"),_g(e,"dates")] if x)
+            flow.append(Paragraph(f"<b>{esc(line)}</b>" + (f"  <font size=9 color='#555555'>{esc(m)}</font>" if m else ""), role_s))
+            if _g(e,"details"): flow.append(Paragraph(esc(e["details"]), body_s))
+    for block in _g(resume,"additional",[]) or []:
+        hd = _g(block,"heading"); items = _g(block,"items",[]) or []
+        if hd and items: section(hd); bullets(items)
     doc.build(flow)
     return buf.getvalue()
+
+
+def _pdf_banner(resume: dict) -> bytes:
+    from reportlab.lib.pagesizes import LETTER
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib.colors import HexColor, white
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+        ListFlowable, ListItem,
+    )
+    W, H   = LETTER
+    BAND   = 1.55 * inch
+    BAR_W  = 5
+    accent = HexColor("#1A3A5C")
+    name_val = _g(resume,"name") or "Your Name"
+    bits     = _contact_bits(resume)
+
+    def draw_header(canvas, doc):
+        canvas.saveState()
+        canvas.setFillColor(accent)
+        canvas.rect(0, H-BAND, W, BAND, fill=1, stroke=0)
+        canvas.setFillColor(white)
+        canvas.setFont("Helvetica-Bold", 22)
+        canvas.drawCentredString(W/2, H-0.72*inch, name_val)
+        if bits:
+            canvas.setFont("Helvetica", 9)
+            canvas.setFillColor(HexColor("#A8C4DC"))
+            canvas.drawCentredString(W/2, H-1.08*inch, "  |  ".join(bits))
+        canvas.restoreState()
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=LETTER,
+        leftMargin=0.7*inch, rightMargin=0.7*inch,
+        topMargin=BAND+0.2*inch, bottomMargin=0.6*inch)
+    ss    = getSampleStyleSheet()
+    avail = W - 1.4*inch
+    sec_s  = ParagraphStyle("sec",  parent=ss["Heading2"], fontSize=11, textColor=accent, spaceBefore=0, spaceAfter=2, leftIndent=8)
+    body_s = ParagraphStyle("body", parent=ss["Normal"],   fontSize=10.5, leading=14)
+    role_s = ParagraphStyle("role", parent=body_s, fontSize=11, spaceBefore=4)
+
+    flow = []
+    def esc(s): return str(s).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+    def section(title):
+        bar = Table([[Spacer(BAR_W,14), Paragraph(esc(title).upper(), sec_s)]],
+                    colWidths=[BAR_W, avail-BAR_W])
+        bar.setStyle(TableStyle([
+            ("BACKGROUND",    (0,0),(0,0), accent),
+            ("LEFTPADDING",   (0,0),(-1,-1), 0),
+            ("RIGHTPADDING",  (0,0),(-1,-1), 0),
+            ("TOPPADDING",    (0,0),(-1,-1), 0),
+            ("BOTTOMPADDING", (0,0),(-1,-1), 0),
+            ("VALIGN",        (0,0),(-1,-1), "MIDDLE"),
+        ]))
+        flow.append(Spacer(1,8)); flow.append(bar); flow.append(Spacer(1,4))
+    def bullets(items):
+        lis = [ListItem(Paragraph(esc(b), body_s), leftIndent=10) for b in items if b]
+        if lis: flow.append(ListFlowable(lis, bulletType="bullet", start="bullet", leftIndent=12))
+
+    if _g(resume,"summary"): section("Summary"); flow.append(Paragraph(esc(resume["summary"]), body_s))
+    skills = _g(resume,"skills",[]) or []
+    if skills: section("Skills"); flow.append(Paragraph(", ".join(esc(s) for s in skills), body_s))
+    exp = _g(resume,"experience",[]) or []
+    if exp:
+        section("Experience")
+        for job in exp:
+            line = " - ".join(x for x in [_g(job,"title"),_g(job,"company")] if x)
+            m    = " | ".join(x for x in [_g(job,"location"),_g(job,"dates")] if x)
+            flow.append(Paragraph(f"<b>{esc(line)}</b>" + (f"  <font size=9 color='#555555'>{esc(m)}</font>" if m else ""), role_s))
+            bullets(_g(job,"bullets",[]) or [])
+    edu = _g(resume,"education",[]) or []
+    if edu:
+        section("Education")
+        for e in edu:
+            line = " - ".join(x for x in [_g(e,"degree"),_g(e,"school")] if x)
+            m    = " | ".join(x for x in [_g(e,"location"),_g(e,"dates")] if x)
+            flow.append(Paragraph(f"<b>{esc(line)}</b>" + (f"  <font size=9 color='#555555'>{esc(m)}</font>" if m else ""), role_s))
+            if _g(e,"details"): flow.append(Paragraph(esc(e["details"]), body_s))
+    for block in _g(resume,"additional",[]) or []:
+        hd = _g(block,"heading"); items = _g(block,"items",[]) or []
+        if hd and items: section(hd); bullets(items)
+    doc.build(flow, onFirstPage=draw_header, onLaterPages=draw_header)
+    return buf.getvalue()
+
+
+def _pdf_minimal(resume: dict) -> bytes:
+    from reportlab.lib.pagesizes import LETTER
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib.colors import HexColor
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, HRFlowable, ListFlowable, ListItem,
+    )
+    W, H     = LETTER
+    HEADER_H = 1.3*inch
+    name_val = _g(resume,"name") or "Your Name"
+    bits     = _contact_bits(resume)
+
+    def draw_header(canvas, doc):
+        canvas.saveState()
+        canvas.setFillColor(HexColor("#2C2C2C"))
+        canvas.setFont("Helvetica-Bold", 24)
+        canvas.drawString(0.7*inch, H-0.65*inch, name_val)
+        if bits:
+            canvas.setFont("Helvetica", 9)
+            canvas.setFillColor(HexColor("#777777"))
+            canvas.drawString(0.7*inch, H-0.95*inch, "  .  ".join(bits))
+        canvas.setStrokeColor(HexColor("#CCCCCC"))
+        canvas.setLineWidth(0.75)
+        canvas.line(0.7*inch, H-HEADER_H, W-0.7*inch, H-HEADER_H)
+        canvas.restoreState()
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=LETTER,
+        leftMargin=0.7*inch, rightMargin=0.7*inch,
+        topMargin=HEADER_H+0.15*inch, bottomMargin=0.6*inch)
+    ss    = getSampleStyleSheet()
+    sec_s  = ParagraphStyle("sec",  parent=ss["Heading2"], fontSize=10.5, textColor=HexColor("#444444"),
+                             spaceBefore=12, spaceAfter=2, fontName="Helvetica-Bold")
+    body_s = ParagraphStyle("body", parent=ss["Normal"],   fontSize=10.5, leading=14)
+    role_s = ParagraphStyle("role", parent=body_s, fontSize=11, spaceBefore=4)
+
+    flow = []
+    def esc(s): return str(s).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+    def section(title):
+        flow.append(Paragraph(esc(title).upper(), sec_s))
+        flow.append(HRFlowable(width="100%", thickness=0.4, color=HexColor("#AAAAAA"), spaceAfter=4))
+    def bullets(items):
+        lis = [ListItem(Paragraph(esc(b), body_s), leftIndent=10) for b in items if b]
+        if lis: flow.append(ListFlowable(lis, bulletType="bullet", start="bullet", leftIndent=12))
+
+    if _g(resume,"summary"): section("Summary"); flow.append(Paragraph(esc(resume["summary"]), body_s))
+    skills = _g(resume,"skills",[]) or []
+    if skills: section("Skills"); flow.append(Paragraph(", ".join(esc(s) for s in skills), body_s))
+    exp = _g(resume,"experience",[]) or []
+    if exp:
+        section("Experience")
+        for job in exp:
+            line = " - ".join(x for x in [_g(job,"title"),_g(job,"company")] if x)
+            m    = " | ".join(x for x in [_g(job,"location"),_g(job,"dates")] if x)
+            flow.append(Paragraph(f"<b>{esc(line)}</b>" + (f"  <font size=9 color='#777777'>{esc(m)}</font>" if m else ""), role_s))
+            bullets(_g(job,"bullets",[]) or [])
+    edu = _g(resume,"education",[]) or []
+    if edu:
+        section("Education")
+        for e in edu:
+            line = " - ".join(x for x in [_g(e,"degree"),_g(e,"school")] if x)
+            m    = " | ".join(x for x in [_g(e,"location"),_g(e,"dates")] if x)
+            flow.append(Paragraph(f"<b>{esc(line)}</b>" + (f"  <font size=9 color='#777777'>{esc(m)}</font>" if m else ""), role_s))
+            if _g(e,"details"): flow.append(Paragraph(esc(e["details"]), body_s))
+    for block in _g(resume,"additional",[]) or []:
+        hd = _g(block,"heading"); items = _g(block,"items",[]) or []
+        if hd and items: section(hd); bullets(items)
+    doc.build(flow, onFirstPage=draw_header, onLaterPages=draw_header)
+    return buf.getvalue()
+
+
+# ── DOCX ─────────────────────────────────────────────────────────────────────
+
+def build_docx(resume: dict, template: str = "classic") -> bytes:
+    if template == "banner":
+        return _docx_banner(resume)
+    if template == "minimal":
+        return _docx_minimal(resume)
+    return _docx_classic(resume)
+
+
+def _right_tab(p) -> None:
+    """Add a right-aligned tab stop at the usable page width so a trailing
+    `\\t{meta}` run pushes dates to the right margin instead of landing on the
+    default 0.5" tab (where long titles collide with the date)."""
+    from docx.shared import Inches
+    from docx.enum.text import WD_TAB_ALIGNMENT
+    # LETTER (8.5") minus python-docx default 1" left/right margins = 6.5".
+    p.paragraph_format.tab_stops.add_tab_stop(Inches(6.5), WD_TAB_ALIGNMENT.RIGHT)
+
+
+def _docx_body(doc, resume: dict, section_fn) -> None:
+    if _g(resume,"summary"):
+        section_fn("Summary"); doc.add_paragraph(resume["summary"])
+    skills = _g(resume,"skills",[]) or []
+    if skills:
+        section_fn("Skills"); doc.add_paragraph(", ".join(str(s) for s in skills))
+    exp = _g(resume,"experience",[]) or []
+    if exp:
+        section_fn("Experience")
+        for job in exp:
+            p = doc.add_paragraph()
+            title = _g(job,"title"); company = _g(job,"company")
+            line = f"{title} - {company}" if title and company else (title or company)
+            r = p.add_run(line); r.bold = True
+            meta = " | ".join(x for x in [_g(job,"location"),_g(job,"dates")] if x)
+            if meta: _right_tab(p); p.add_run(f"\t{meta}").italic = True
+            for b in _g(job,"bullets",[]) or []: doc.add_paragraph(str(b), style="List Bullet")
+    edu = _g(resume,"education",[]) or []
+    if edu:
+        section_fn("Education")
+        for e in edu:
+            p = doc.add_paragraph()
+            line = " - ".join(x for x in [_g(e,"degree"),_g(e,"school")] if x)
+            p.add_run(line).bold = True
+            meta = " | ".join(x for x in [_g(e,"location"),_g(e,"dates")] if x)
+            if meta: _right_tab(p); p.add_run(f"\t{meta}").italic = True
+            if _g(e,"details"): doc.add_paragraph(str(e["details"]))
+    for block in _g(resume,"additional",[]) or []:
+        heading = _g(block,"heading"); items = _g(block,"items",[]) or []
+        if heading and items:
+            section_fn(heading)
+            for it in items: doc.add_paragraph(str(it), style="List Bullet")
+
+
+def _docx_classic(resume: dict) -> bytes:
+    from docx import Document
+    from docx.shared import Pt, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    doc = Document()
+    doc.styles["Normal"].font.name = "Calibri"
+    doc.styles["Normal"].font.size = Pt(10.5)
+    h = doc.add_paragraph(); h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = h.add_run(_g(resume,"name") or "Your Name"); run.bold=True; run.font.size=Pt(20)
+    bits = _contact_bits(resume)
+    if bits:
+        c = doc.add_paragraph(" | ".join(bits)); c.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        c.runs[0].font.size = Pt(9.5)
+    def section(title):
+        p = doc.add_paragraph(); r = p.add_run(title.upper())
+        r.bold=True; r.font.size=Pt(12); r.font.color.rgb=RGBColor(0x1A,0x4D,0x7A)
+        p.paragraph_format.space_before = Pt(8); p.paragraph_format.space_after = Pt(2)
+    _docx_body(doc, resume, section)
+    buf = io.BytesIO(); doc.save(buf); return buf.getvalue()
+
+
+def _docx_banner(resume: dict) -> bytes:
+    from docx import Document
+    from docx.shared import Pt, RGBColor
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    def _shade(para, fill_hex):
+        pPr = para._p.get_or_add_pPr()
+        shd = OxmlElement("w:shd")
+        shd.set(qn("w:val"),"clear"); shd.set(qn("w:color"),"auto"); shd.set(qn("w:fill"),fill_hex)
+        pPr.append(shd)
+    doc = Document()
+    doc.styles["Normal"].font.name = "Calibri"
+    doc.styles["Normal"].font.size = Pt(10.5)
+    h = doc.add_paragraph(); h.alignment = WD_ALIGN_PARAGRAPH.CENTER; _shade(h,"1A3A5C")
+    run = h.add_run(_g(resume,"name") or "Your Name"); run.bold=True; run.font.size=Pt(20)
+    run.font.color.rgb = RGBColor(0xFF,0xFF,0xFF)
+    bits = _contact_bits(resume)
+    if bits:
+        c = doc.add_paragraph(" | ".join(bits)); c.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        _shade(c,"2A5F8F"); c.runs[0].font.size=Pt(9.5)
+        c.runs[0].font.color.rgb = RGBColor(0xC5,0xD5,0xE8)
+    def section(title):
+        p = doc.add_paragraph(); r = p.add_run(title.upper()); _shade(p,"E8EFF5")
+        r.bold=True; r.font.size=Pt(12); r.font.color.rgb=RGBColor(0x1A,0x3A,0x5C)
+        p.paragraph_format.space_before = Pt(8); p.paragraph_format.space_after = Pt(2)
+    _docx_body(doc, resume, section)
+    buf = io.BytesIO(); doc.save(buf); return buf.getvalue()
+
+
+def _docx_minimal(resume: dict) -> bytes:
+    from docx import Document
+    from docx.shared import Pt, RGBColor
+    doc = Document()
+    doc.styles["Normal"].font.name = "Calibri"
+    doc.styles["Normal"].font.size = Pt(10.5)
+    h = doc.add_paragraph()
+    run = h.add_run(_g(resume,"name") or "Your Name"); run.bold=True; run.font.size=Pt(22)
+    run.font.color.rgb = RGBColor(0x2C,0x2C,0x2C)
+    bits = _contact_bits(resume)
+    if bits:
+        c = doc.add_paragraph("  .  ".join(bits))
+        c.runs[0].font.size=Pt(9.5); c.runs[0].font.color.rgb=RGBColor(0x77,0x77,0x77)
+    def section(title):
+        p = doc.add_paragraph(); r = p.add_run(title.upper())
+        r.bold=True; r.font.size=Pt(11); r.font.color.rgb=RGBColor(0x44,0x44,0x44)
+        p.paragraph_format.space_before = Pt(8); p.paragraph_format.space_after = Pt(2)
+    _docx_body(doc, resume, section)
+    buf = io.BytesIO(); doc.save(buf); return buf.getvalue()

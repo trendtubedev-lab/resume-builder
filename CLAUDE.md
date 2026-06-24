@@ -1,11 +1,10 @@
 # Project rules & preferences
 
 ## Me
-Michael (mritner@gmail.com). GitHub identity for this project: **trendtubedev-lab** (account email trendtubedev@gmail.com). Building **TailorCV**, a resume-tailoring web app, and leveling up while doing it. I do not want novice mistakes — verify, don't assume.
+Michael Ritner — building TailorCV, a tool that rewrites people's resumes and lets them download in multiple styles to help them land jobs.
 
 ## Priority when rules conflict
 Safety / ask-first > accuracy > verification > everything else.
-
 
 ---
 
@@ -14,7 +13,7 @@ These exist because real failures happened. Run them, show the output, do not sk
 
 0. **Load state before working.** Read `MEMORY.md`, `DECISIONS.md`, and the last ~5 entries of `CHANGELOG.md` to understand where things stand. Note any `[UNVERIFIED]` items. Then confirm the goal for the session before starting non-trivial work.
 
-1. **Confirm you are in the RIGHT folder.** The real repo is _[/path/to/your/repo]_. Before editing anything:
+1. **Confirm you are in the RIGHT folder.** The real repo is `C:\Users\May Nerd\Claude Workspace\resume-builder\resume-builder`. Before editing anything:
    - Run `pwd` (or check the path of the file you're about to touch) AND `git rev-parse --show-toplevel`.
    - Print the resolved path and compare it to the repo path above and to the path shown in my shell prompt.
    - If they don't match — STOP and tell me. Do NOT edit a "similar looking" copy elsewhere. If duplicate folders exist on your system, editing the wrong one wastes time.
@@ -22,6 +21,7 @@ These exist because real failures happened. Run them, show the output, do not sk
 2. **Trust nothing that looks truncated or stale — root-cause it.** If a file read via the sandbox/bash looks short, cut off, or fails to compile:
    - Do NOT assume it's a transient issue and route around it. Compare `wc -l <file>` against `git show HEAD:<file> | wc -l` and against the Read tool.
    - If the sandbox view is shorter than reality, the sandbox view is suspect. The Read/Write/Edit tools (host-side) are authoritative; bash/git/grep run in the sandbox may return stale data.
+   - **To run/verify just-edited Python in the sandbox, don't import it from the mount** (it's often null-padded or truncated right after a host edit). Run `python3 scripts/sandbox_verify.py` — it stages null-stripped copies under `/tmp/proj` and flags any file still CORRUPTED with the exact splice line. Then test with `PYTHONPATH=/tmp/proj`. (Full recipe in MEMORY.md gotchas.)
 
 3. **NEVER run git write commands (add/commit/push/reset) from the sandbox if any file view is truncated** — you will commit corrupted half-files. When in doubt, hand me the exact commands to run in my own shell instead.
 
@@ -58,11 +58,16 @@ Do this as you go, not in a batch at the end.
 - Cite sources for external/web/doc claims.
 
 ## Project
-- One line: TailorCV — FastAPI + single-file HTML app that tailors 1–3 uploaded resumes to a pasted job description via a multi-agent Claude review panel; exports PDF/Word.
-- Build / run: `start.command` (macOS) / `start.bat` (Windows) auto-create venv + launch; or `pip install -r requirements.txt` then run `app/main.py`.
-- Test / lint / typecheck: `python scripts/live_test.py` (live tailoring harness — must run locally; the sandbox blocks `api.anthropic.com`).
-- Never touch: `.env` (secrets), `app/__pycache__/`.
+- One line: TailorCV — rewrites users' resumes using AI (Anthropic) and lets them download in multiple style formats (DOCX, PDF, etc.) to improve their job search.
+- Build / run: `python -m venv .venv && .venv\Scripts\pip install -r requirements.txt` then `uvicorn app.main:app --host 0.0.0.0 --port 8000`. On Windows, double-click `start.bat`.
+- Test / lint / typecheck: No test suite currently. Run the app manually to verify.
+- Never touch: `.env`, `.venv/`, `debug.log`, `run.log`
 
 ## Environment-specific notes
-- The Cowork sandbox has mounted the WRONG folder and served TRUNCATED files. Preflight steps 1–3 exist to catch this; treat host-side Read/Write/Edit as ground truth.
-- A duplicate copy has existed under `C:\Users\mayne\Claude\Projects\resume builder` — that is NOT the repo. Do not edit it.
+- FastAPI backend (`app/main.py`), Python 3.11, dependencies in `requirements.txt`.
+- AI calls route through the local `claude` CLI on the user's own Claude Pro/Max plan
+  (`app/agents.py` → `_claude_code_complete`). The code does **not** read
+  `ANTHROPIC_API_KEY`; no Anthropic API key is used. Designed to run locally / within
+  Claude desktop.
+- `.venv/` is local-only; not in version control. Re-run pip install if deps are missing.
+- `start.bat` / `start.command` are convenience launchers; `Procfile` is for Render.com deploy.

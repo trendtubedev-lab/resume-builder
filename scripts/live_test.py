@@ -1,21 +1,17 @@
 """Live validation harness for TailorCV's AI panel.
 
-Runs the real Claude API against the three bundled sample resumes, prints each
+Runs the local Claude CLI against the three bundled sample resumes, prints each
 reviewer's scores and the synthesized result, and runs a basic FABRICATION CHECK
 (every employer, school, and 4-digit year in the output must appear in the
-original resume). Use this after adding your Anthropic key to confirm output
-quality before shipping or charging.
+original resume). Use this after changing prompts or models.
 
 Usage:
-    # key from .env or environment
-    python scripts/live_test.py
-    # or just one sample
-    python scripts/live_test.py mid
+    python scripts/live_test.py          # all 3 samples
+    python scripts/live_test.py mid      # just one
 """
 from __future__ import annotations
 
 import io
-import os
 import re
 import sys
 from pathlib import Path
@@ -118,17 +114,7 @@ def main():
         print("\n❌ Export check failed — fix exporters before the API panel.")
         sys.exit(2)
 
-    # Show which provider will handle the calls BEFORE any fire, so it is never
-    # a surprise whether a run costs API money.
-    if agents.using_claude_code():
-        print("\nProvider: claude-code — calls run on your local Claude Code plan "
-              "(NO API tokens billed).")
-    else:
-        print("\nProvider: api — calls bill against ANTHROPIC_API_KEY (costs money). "
-              "Set PROVIDER=claude-code in .env to use your own plan instead.")
-        if not os.getenv("ANTHROPIC_API_KEY"):
-            print("No ANTHROPIC_API_KEY found. Add it to .env or export it, then re-run.")
-            sys.exit(1)
+    print("\nProvider: claude-code — calls run on your local Claude plan.")
     ids = sys.argv[1:] or list(SAMPLES)
     ok = True
     for sid in ids:

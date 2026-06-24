@@ -11,19 +11,19 @@ with no code changes.
 
 ---
 
-## Accounts & API keys
+## Accounts & sign-in
 
 - **Sign-in:** users log in with **Google**. Set up a Google OAuth client (see
   "Google sign-in setup" below). For quick local use without Google, set
   `AUTH_DISABLED=1` in `.env` and the app runs as a single local user.
-- **API keys:** each signed-in user pastes their **own Anthropic API key** in
-  the app (stored in memory for their session only, never written to disk).
-  Users without a key get the free **demo mode** preview. You can optionally set
-  a server-wide `ANTHROPIC_API_KEY` as a fallback.
+- **AI calls:** route through the local `claude` CLI on the user's own **Claude
+  Pro/Max plan**. No Anthropic API key required.
+  See [QUICKSTART_FRIENDS.md](QUICKSTART_FRIENDS.md) for the one-time setup (~10 min).
 
 ## Run it locally (for a friend)
 
-You need **Python 3.10+**.
+You need **Python 3.10+** and **Claude Code** installed and signed in
+(see [QUICKSTART_FRIENDS.md](QUICKSTART_FRIENDS.md)).
 
 1. Create your config:
    ```
@@ -31,13 +31,6 @@ You need **Python 3.10+**.
    ```
    At minimum, set `AUTH_DISABLED=1` and a `SESSION_SECRET`.
 
-   **No API key? Use your Claude Pro/Max plan instead.**
-   Set `PROVIDER=claude-code` in `.env` and TailorCV routes calls through your
-   local Claude Code CLI — no Anthropic API key, no per-run charge.
-   See [QUICKSTART_FRIENDS.md](QUICKSTART_FRIENDS.md) for the full setup (takes ~10 min).
-
-   If you do have an API key, leave `PROVIDER=api` (the default) and your friend
-   pastes their key in the app.
 2. Start it:
    - **macOS/Linux:** double-click `start.command` (or run `./start.command`)
    - **Windows:** double-click `start.bat`
@@ -75,11 +68,11 @@ isn't configured. Use `AUTH_DISABLED=1` to bypass it locally.
 The app is a standard ASGI (FastAPI) web app, so any Python host works. Pick one:
 
 - **Render** — push this folder to a Git repo, then "New > Blueprint" and point
-  it at `render.yaml`. Set `ANTHROPIC_API_KEY` as a secret in the dashboard.
+  it at `render.yaml`.
 - **Docker** (Fly.io, Railway, Cloud Run, any VPS):
   ```bash
   docker build -t tailorcv .
-  docker run -e ANTHROPIC_API_KEY=sk-ant-... -p 8000:8000 tailorcv
+  docker run -p 8000:8000 tailorcv
   ```
 - **Heroku-style** hosts read the included `Procfile`.
 
@@ -88,56 +81,23 @@ changes between local and production.
 
 ### Before charging real users (productionization checklist)
 Generated resumes are **persisted to SQLite** (`data/tailorcv.db`, via `app/db.py`),
-so they survive a restart. Per-user Anthropic keys are still kept **in memory only**
-(by design — secrets never hit disk). To productionize further:
+so they survive a restart. To productionize further:
 - For a multi-instance / high-write deployment, swap SQLite for Postgres (the app
   only talks to `app/db.py`, so it's a contained change).
-- Add auth + per-user API usage metering / billing (e.g. Stripe).
 - Add rate limiting and request size caps (basic 5 MB/file, 3-file caps exist).
-- Consider a job queue for the API calls if traffic is high.
+- Consider a job queue for AI calls if traffic is high.
 - Add logging/error tracking (e.g. Sentry).
 
 ---
-
-## Demo mode (no API key needed)
-
-If no `ANTHROPIC_API_KEY` is set (or you set `DEMO_MODE=1`), the app runs in
-**demo mode**: it shows a yellow banner and produces a lightweight *offline*
-preview instead of calling Claude. This lets anyone click through the whole
-flow — upload, review panel, PDF/Word download — for free.
-
-Use the **"⚡ Try a sample…"** picker to load one of three bundled fake resumes
-(entry-level, mid-career, senior) plus a matching job description. Great for
-demos and screenshots. Demo output is clearly labelled "· demo"; add a real key
-to get the full multi-agent rewrite.
-
-## Behind a corporate proxy
-
-Standard `HTTPS_PROXY` / `HTTP_PROXY` env vars are honored automatically — most
-setups need nothing extra. If your proxy inspects TLS (a self-signed cert in the
-chain), point the app at your corporate root CA:
-
-```
-ANTHROPIC_CA_BUNDLE=/path/to/corporate-root-ca.pem
-```
-
-You can also force a proxy with `ANTHROPIC_PROXY=...`. As a last resort only,
-`ANTHROPIC_SKIP_TLS_VERIFY=1` disables certificate verification (insecure — the
-app logs a warning when it's on). When none of these are set, the app uses the
-SDK's default client, so normal deployments are unaffected.
 
 ## Configuration (`.env`)
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | — | **Required for API mode.** Your Claude API key. |
-| `PROVIDER` | `api` | `api` uses the Anthropic API (per-call billing). `claude-code` routes through your local Claude Code CLI on your own Pro/Max plan — no API key, no per-run charge. |
 | `REVIEWER_MODEL` | `claude-sonnet-4-6` | Model for the review panel. |
 | `SYNTH_MODEL` | `claude-sonnet-4-6` | Model for the final rewrite. |
+| `CLAUDE_CODE_TIMEOUT` | `180` | Seconds to wait per claude CLI call before timing out. |
 | `PORT` | `8000` | Port to serve on (most hosts set this automatically). |
-| `ANTHROPIC_PROXY` | — | Explicit proxy URL (else standard `HTTPS_PROXY` is used). |
-| `ANTHROPIC_CA_BUNDLE` | — | Path to a corporate root CA for TLS-inspecting proxies. |
-| `ANTHROPIC_SKIP_TLS_VERIFY` | `0` | `1` disables TLS verification (insecure, last resort). |
 
 ---
 
@@ -160,7 +120,7 @@ fabricate employers, dates, or metrics.
 
 ## Validate output quality (live test)
 
-After adding your key, sanity-check the AI against the bundled samples:
+Sanity-check the AI against the bundled samples:
 
 ```bash
 python scripts/live_test.py          # all 3 samples
@@ -171,18 +131,8 @@ It prints each reviewer's score and the tailored result, and runs a
 **fabrication check** — every employer, school, and year in the output must
 appear in the original resume. Use it after changing prompts or models.
 
-## Cost note
-Each tailoring run makes 5 model calls: 4 reviewers in parallel plus 1
-synthesis. Two ways to pay for them:
-
-- **API mode** (`PROVIDER=api`, the default): billed per call against your
-  Anthropic key. The cost depends on `REVIEWER_MODEL` / `SYNTH_MODEL` and your
-  resume/JD length — check current rates at
-  https://www.anthropic.com/pricing and watch usage at
-  https://console.anthropic.com. Default models are Sonnet; switch to Haiku in
-  `.env` for cheaper runs, or to a larger model for quality-critical output.
-- **Local mode** (`PROVIDER=claude-code`): routes the same 5 calls through your
-  local Claude Code CLI on your existing Pro/Max plan. No API key and no
-  per-run charge — best when you (or a friend with a plan) run it on your own
-  machine. Demo mode (no key, no plan) stays free but produces only the offline
-  preview, not the full rewrite.
+## Usage note
+Each tailoring run makes ~5 calls through your local Claude plan (4 reviewers in
+parallel + 1 synthesis). These count against your Claude Pro/Max plan's usage
+limits. Runs take 1–3 minutes in local Claude plan mode. Raise
+`CLAUDE_CODE_TIMEOUT` in `.env` if you hit timeouts.

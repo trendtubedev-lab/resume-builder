@@ -6,8 +6,8 @@ in a signed session cookie (Starlette SessionMiddleware).
 Set AUTH_DISABLED=1 to bypass Google entirely for local development — every
 request is treated as a single local user.
 
-AI calls use PROVIDER=claude-code (user's own Claude plan) or a server-level
-ANTHROPIC_API_KEY in .env for hosted mode. No per-user key storage.
+AI calls route through the local `claude` CLI on the user's own Pro/Max plan.
+No Anthropic API key required.
 """
 from __future__ import annotations
 

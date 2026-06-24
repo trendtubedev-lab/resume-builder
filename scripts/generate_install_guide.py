@@ -218,24 +218,12 @@ def build_story(styles):
         "your existing Claude subscription with no additional per-use cost.", B))
     story.append(Spacer(1, 8))
 
-    story.append(Paragraph("Option A — Use your Claude Pro/Max plan (recommended)",
-                            SH))
     bullets_a = [
         "Claude Pro or Max subscription — claude.ai",
         "Node.js 18 or later — nodejs.org (download the LTS installer)",
         "Python 3.10 or later — python.org",
     ]
     for b in bullets_a:
-        story.append(Paragraph(f"&bull; &nbsp; {b}", styles["BulletBody"]))
-
-    story.append(Spacer(1, 8))
-    story.append(Paragraph(
-        "Option B — Use an Anthropic API key", SH))
-    bullets_b = [
-        "Anthropic API key — console.anthropic.com",
-        "Python 3.10 or later — python.org",
-    ]
-    for b in bullets_b:
         story.append(Paragraph(f"&bull; &nbsp; {b}", styles["BulletBody"]))
 
     story.append(Spacer(1, 6))
@@ -259,7 +247,7 @@ def build_story(styles):
     story.append(Spacer(1, 10))
 
     # Step 2
-    story.append(Paragraph("Step 2: Install Claude Code  (Option A only)", styles["StepNum"]))
+    story.append(Paragraph("Step 2: Install Claude Code", styles["StepNum"]))
     story.append(Paragraph(
         "Open a terminal (Windows: PowerShell; Mac: Terminal) and run:", B))
     story.append(code_block(styles,
@@ -287,17 +275,9 @@ def build_story(styles):
     story.append(Spacer(1, 6))
     story.append(Paragraph(
         "Open <b>.env</b> in any text editor (Notepad works on Windows). "
-        "Set the values for your chosen option:", B))
+        "Set these values:", B))
     story.append(Spacer(1, 4))
-    story.append(Paragraph("<b>For Option A (Claude plan):</b>", B))
     story.append(code_block(styles,
-        "PROVIDER=claude-code",
-        "AUTH_DISABLED=1",
-        "SESSION_SECRET=any-long-random-string-you-make-up"))
-    story.append(Spacer(1, 6))
-    story.append(Paragraph("<b>For Option B (API key):</b>", B))
-    story.append(code_block(styles,
-        "ANTHROPIC_API_KEY=sk-ant-your-key-here",
         "AUTH_DISABLED=1",
         "SESSION_SECRET=any-long-random-string-you-make-up"))
     story.append(Spacer(1, 6))
@@ -321,9 +301,9 @@ def build_story(styles):
     story.append(code_block(styles, "http://localhost:8000"))
     story.append(Spacer(1, 6))
     story.append(Paragraph(
-        "You should see a <b>green banner</b> at the top of the page "
-        "(\"Running on your Claude plan\" for Option A, or the reviewer panel "
-        "ready for Option B). A yellow banner means demo mode — see Section 5 FAQ.", B))
+        "You should see a <b>green banner</b> at the top of the page: "
+        "\"Running on your Claude plan.\" If you see an error instead, "
+        "check Section 6 (Troubleshooting).", B))
     story.append(Spacer(1, 12))
 
     # ── SECTION 4: Using TailorCV ─────────────────────────────────────────────
@@ -336,8 +316,8 @@ def build_story(styles):
         ("2.", "Paste the target job description into the text box."),
         ("3.", "Choose a tone: Professional, Impactful, Concise, or Executive."),
         ("4.", "Click <b>Tailor my resume</b>."),
-        ("5.", "Wait roughly 30–60 seconds while four AI reviewers analyze your "
-               "resume independently."),
+        ("5.", "Wait 1–3 minutes while four AI reviewers analyze your "
+               "resume independently via your local Claude plan."),
         ("6.", "Review the panel feedback — each reviewer shows a score and "
                "specific suggestions — plus the synthesized tailored resume."),
         ("7.", "Download the result as PDF or Word using the buttons at the bottom."),
@@ -384,14 +364,9 @@ def build_story(styles):
          "No. TailorCV only rephrases, reorders, and emphasizes what is "
          "already in your resume. It will never invent employers, titles, "
          "dates, or skills you do not have."),
-        ("What is demo mode?",
-         "If you have not set up a Claude plan or API key, the app runs a "
-         "lightweight offline preview. The interface works but the results "
-         "are not AI-generated. Look for the yellow banner at the top."),
         ("How much does it cost per run?",
-         "Option A (Claude plan): covered by your existing subscription. "
-         "Option B (API key): roughly a few cents per run using Claude Sonnet "
-         "(5 model calls per tailoring run)."),
+         "Covered by your existing Claude Pro/Max subscription — no extra charge. "
+         "Each tailoring run makes ~5 calls through your local Claude plan."),
         ("Something went wrong — what do I do?",
          "Check the troubleshooting table in Section 6 below."),
     ]
@@ -412,7 +387,7 @@ def build_story(styles):
         ["\"Are you signed in? Run claude once to log in.\"",
          "Run claude in terminal, sign in with your Claude subscription (choose Subscription, not API key)."],
         ["Yellow demo banner instead of green",
-         "Check .env has PROVIDER=claude-code (Option A) or a valid ANTHROPIC_API_KEY (Option B). Restart the app."],
+         "This shouldn't happen — TailorCV always uses your local Claude plan. Restart the app."],
         ["\"Timed out\" during tailoring",
          "Re-run — usually a one-off. If persistent, add CLAUDE_CODE_TIMEOUT=300 to .env."],
         ["start.command won't open on Mac",
