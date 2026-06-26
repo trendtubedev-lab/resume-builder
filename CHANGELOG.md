@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-06-25 — Add 4 military/federal reviewer agents (opt-in)
+
+- **What:** four new preset personas in `app/personas.py`, all `default_enabled=False`:
+  - `usajobs` — **USAJOBS Federal Application Specialist** (announcement/series+grade
+    match, specialized-experience & KSA language, eligibility signals, literal
+    minimum-qualifications gate).
+  - `fed_format` — **Federal Resume Format Auditor** (hours/week, month-year dates,
+    GS grade/salary, supervisor + "may we contact", 3–5 page detail; flags
+    civilian one-line/one-page framing as harmful here).
+  - `mil_translate` — **Military-to-Civilian Translator** (translates MOS/AFSC/rating,
+    ranks, acronyms; quantifies hidden scope; preserves precise terms when the JD is
+    federal/defense).
+  - `mp_security` — **Security, MP & Clearance Specialist** (clearance presentation:
+    level/agency/investigation+date/poly/active; access control, use-of-force, force
+    protection, NCIC, AA&E custody, CLEET-POST/FLETC certs; DoD + federal civilian).
+- **Why:** user request — extend the panel for military and federal-government job
+  seekers. Scoped as **reviewer lenses only** (no synthesizer/export format change);
+  a true federal-resume output format remains a deferred follow-up.
+- **Verified:** `.venv` python — all 4 load in `PRESET_PERSONAS` (19 total, no dup
+  keys), each `default_enabled=False`/`is_preset=True`, reachable via
+  `agents._load_personas()` through the DB merge path. UI needs no change: the panel
+  fetches `/api/personas` dynamically and default-selects only `default_enabled`
+  personas, so the 4 appear opt-in (unchecked).
+
 ## 2026-06-24 — Clickable contact hyperlinks (PDF + DOCX)
 
 - **What:** contact bits are now auto-classified (`_classify_contact`) — email →
