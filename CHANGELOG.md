@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-06-24 — Clickable contact hyperlinks (PDF + DOCX)
+
+- **What:** contact bits are now auto-classified (`_classify_contact`) — email →
+  `mailto:`, URL/bare-domain (linkedin.com/in/x, www.site.com, site.io) →
+  `https:`, everything else (phone, location) stays plain — and rendered as real
+  clickable links in both formats:
+  - **PDF classic:** Paragraph `<a href>` markup (`_pdf_contact_markup`).
+  - **PDF banner/minimal:** contact is canvas-drawn, so links are drawn per-bit
+    in a link colour with a `canvas.linkURL` rectangle over each
+    (`_canvas_contact`) — banner links are white-on-navy, minimal links navy.
+  - **DOCX (all 3):** `w:hyperlink` OXML with an external relationship
+    (`_add_hyperlink`; python-docx has no native API), built run-by-run via
+    `_docx_contact`. Promoted `_shade` to module scope for reuse.
+- **Why:** follow-up item #1 from the professionalism pass — modern resumes have
+  clickable email/LinkedIn; recruiters click them from the PDF/Word file.
+- **Verified:** `scripts/export_check.py` passes; inspected output bytes — each
+  PDF carries `/URI` annotations and `mailto:`/`https:` targets; each DOCX has 2
+  `<w:hyperlink>` with correct external targets and phone/location left plain.
+  Visually confirmed banner's centered link layout (no overlap, links recoloured).
+
 ## 2026-06-24 — Export polish: fix broken PDF bullets + professionalism pass
 
 - **What:** reworked `app/export.py` rendering across all 3 templates × 2 formats.

@@ -52,9 +52,14 @@ Done this session:
 - DOCX classic/minimal section headings get a bottom-border rule (`_bottom_border`) to match the PDF `HRFlowable`.
 - Margins unified to 0.75" PDF + DOCX (`_set_margins`; `_right_tab` moved 6.5"→7.0").
 - Minimal contact separator is now a middot `·` (`MIDDOT`), was a baseline `.`.
+- **Clickable contact hyperlinks (done).** `_classify_contact` → mailto for email,
+  https for URLs/bare domains, plain for phone/location. PDF classic uses Paragraph
+  `<a>`; PDF banner/minimal use `_canvas_contact` (canvas links can't be done via
+  Paragraph — draw per-bit + `canvas.linkURL` rect). DOCX uses `_add_hyperlink`
+  (w:hyperlink OXML + external rel; no native python-docx API). `_shade` promoted
+  to module scope. Verified via /URI count (PDF) + w:hyperlink targets (DOCX).
 
 Still open in `app/export.py` (lower priority):
-- No clickable hyperlinks (email/LinkedIn render as plain text) — deferred follow-up.
 - No render-time length/page-count control.
 - Skills still a single comma blob (categorising needs an AI-output schema change).
 
