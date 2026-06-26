@@ -20,11 +20,13 @@ FastAPI backend + single-file HTML frontend (`app/static/index.html`). Upload 1�
 - `scripts/live_test.py` — live tailoring harness (run locally only)
 - `.claude/skills/release-check/SKILL.md` — session-close ritual
 
-## Status (2026-06-24)
-- **Latest push:** `23cbb6c` — export professionalism pass (PDF bullet bug fix +
-  right-aligned dates, em dash, DOCX heading rules, unified margins, middot;
-  render_samples.py). Pushed to `trendtubedev-lab/resume-builder` main.
-  Prior pushes: `1fdd038` (claude-code-only finalize + dev tooling), then the
+## Status (2026-06-25)
+- **Latest push:** `e7fa9a8` — clickable contact hyperlinks in PDF + DOCX
+  (`_classify_contact`/`_canvas_contact`/`_add_hyperlink`; `_shade` promoted to
+  module scope). Pushed to `trendtubedev-lab/resume-builder` main.
+  Prior pushes: `23cbb6c` (export professionalism pass: PDF bullet fix +
+  right-aligned dates, em dash, DOCX heading rules, unified margins, middot),
+  `1fdd038` (claude-code-only finalize + dev tooling), then the
   caching/robustness commit, then `b0db009`.
 - PROVIDER=claude-code confirmed working end-to-end; all 3 live_test samples pass fabrication check
 - **Per-user API key storage PERMANENTLY REMOVED** — USER_KEYS, /api/key routes, key card UI all gone. No billing path for any user.
